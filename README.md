@@ -20,7 +20,7 @@ High performance on Unix-Like-System
 ## Advanced features
 - Lock-Free
 - Customizable memory allocator
-Go to the [Documentation](https://github.com/Xarvie/chain-net/blob/master/README.md#documentation) to view details
+- Go to the [Documentation](https://github.com/Xarvie/chain-net/blob/master/README.md#documentation) to view details
 
 ## Licensing
 
