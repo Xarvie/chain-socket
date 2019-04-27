@@ -3,30 +3,40 @@ chain-net is a cross-platform CXX library for network IO，Provides built-in IO 
 
 ---
 
-## Feature
-#### Unsafe-Code
+# Feature
+## Unsafe-Code
 hmmmm.. lueluelue
 
-#### Follow the Unix design philosophy:
+## Lock-Free
+*Go to [Documentation](https://github.com/Xarvie/chain-net/blob/master/README.md#documentation) to view details*
+
+## Zero-copy
+In most cases, it is Zero-Copy. If the Socket send buffer is full, it will copy the data into the library's built-in IO buffer (This should be avoided during development.)
+
+## Follow the Unix design philosophy
 >*"small and beautiful"*
 
-#### Crose-Platform
+## Crose-Platform
 High performance on Unix-Like-System
 - kqueue Based: FreeBSD / OpenBSD / MacOSX
 - Epoll Based: CentOS / Fedora / Ubuntu / Debian / OpenSUSE
 - IOCP Based(WIP): Solaris / Windows
 - Select Based for Debug: Solaris / Windows / Unix
 
-## Advanced features
-- Lock-Free
-- Customizable memory allocator
-- *Go to [Documentation](https://github.com/Xarvie/chain-net/blob/master/README.md#documentation) to view details*
+# Advanced features
+## Customizable memory allocator
 
-## Licensing
+*Go to [Documentation](https://github.com/Xarvie/chain-net/blob/master/README.md#documentation) to view details*
+
+# Licensing
 
 chain-net is licensed under the MIT license. 
 
-## Documentation
+# Documentation
 
 None
 
+# TO-DO list
+
+- Unit test case
+- None
