@@ -18,9 +18,9 @@ High performance on Unix-Like-System
 - Select Based for Debug: Solaris / Windows / Unix
 
 ## Advanced features
-Lock-Free
-Customizable memory allocator
-Go to the document to view details
+- Lock-Free
+- Customizable memory allocator
+Go to the [Documentation](https://github.com/Xarvie/chain-net/blob/master/README.md#documentation) to view details
 
 ## Licensing
 
