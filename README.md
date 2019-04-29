@@ -39,3 +39,12 @@ None
 - Unit test case
 - Ipv6
 - Connector
+
+# Build environment
+``` bash
+git clone https://github.com/Xarvie/chain-net.git
+cd chain-net
+mkdir build && cd build
+cmake ..
+cmake --build .
+```
