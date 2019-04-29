@@ -56,6 +56,7 @@ enum xx {
 
 struct sockInfo
 {
+    //TODO move construct
     int port;
     char ip[128];
     int fd;
@@ -74,6 +75,7 @@ enum RWMOD {
 struct Addr {
     std::string ip;
     std::string port;
+    int type;
 };
 
 struct Msg {
@@ -81,6 +83,15 @@ struct Msg {
     unsigned char *buff;
 };
 
+enum {
+    ACCEPT_EVENT,
+    RW_EVENT
+};
+enum {
+    REQ_DISCONNECT,
+    REQ_SHUTDOWN,
+    REQ_CONNECT
+};
 
 
 #endif //SERVER_NETSTRUCT_H

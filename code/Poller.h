@@ -1,10 +1,26 @@
-#ifndef SERVER_POLLER_H
-#define SERVER_POLLER_H
+#ifndef MAIN_POLLER_H
+#define MAIN_POLLER_H
 
+#include "SystemReader.h"
+#include "Buffer.h"
+#include "NetStruct.h"
 
-class Poller {
+#if defined(SELECT_SERVER)
 
-};
+#include "SelectPoller.h"
 
+#elif defined(OS_LINUX)
 
-#endif //SERVER_POLLER_H
+#include "EpollPoller.h"
+
+#elif defined(OS_DARWIN)
+
+#include "KqueuePoller.h"
+
+#elif defined(OS_WINDOWS)
+
+#include "IOCPPoller.h"
+
+#endif
+
+#endif //MAIN_POLLER_H

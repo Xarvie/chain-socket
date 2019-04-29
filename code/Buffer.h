@@ -1,6 +1,5 @@
 #ifndef BUFFER_H_
 #define BUFFER_H_
-
 #include "NetStruct.h"
 
 class MessageBuffer
@@ -11,7 +10,7 @@ public:
     {
 //        if(buff != nullptr)
 //            destroy();
-        buff = (unsigned char*)malloc(xx::BUFFER_SIZE);
+        buff = (unsigned char*)xmalloc(xx::BUFFER_SIZE);
         capacity = BUFFER_SIZE;
         size = 0;
     }
@@ -66,6 +65,18 @@ public:
     int size = 0;
     unsigned char* buff = nullptr;
     int capacity = 0;
+};
+
+struct Session {
+    uint64_t sessionId = 0;
+    MessageBuffer writeBuffer;
+    MessageBuffer readBuffer;
+
+    void reset() {
+        sessionId = 0;
+        readBuffer.reset();
+        writeBuffer.reset();
+    }
 };
 
 #endif /* BUFFER_H_ */
