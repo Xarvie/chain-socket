@@ -88,6 +88,7 @@ void Poller::workerThreadCB(int pollerIndex) {
                     if (kevent(this->queue[pollerIndex], &event_set[pollerIndex], 1, NULL, 0, NULL) == -1) {
                         printf("error\n");
                     }
+                    this->workerVec[index]->onlineSessionSet.insert(conn);
                     this->onAccept(*conn, Addr());
                 }
             }
@@ -226,6 +227,8 @@ void Poller::closeSession(Session &conn) {
     EV_SET(&event_set[index], conn.sessionId, EVFILT_WRITE, EV_DELETE, 0, 0, NULL);
 
     closeSocket(conn.sessionId);
+    this->workerVec[index]->onlineSessionSet.erase(&conn);
+    this->onDisconnect(conn);
 }
 
 bool Poller::createListenSocket(int port)
@@ -267,6 +270,13 @@ int Poller::run() {
         }
     {/* create listen*/
         this->createListenSocket(port);
+    }
+
+    for(int i = 0; i < this->maxWorker; i++)
+    {
+        Worker* worker = new (xmalloc(sizeof(Worker))) Worker();
+        worker->index = i;
+        workerVec.push_back(worker);
     }
 
     for (int i = 0; i < this->maxWorker; i++) {

@@ -9,6 +9,11 @@
 #include "Buffer.h"
 #include "SystemInterface.h"
 
+class Worker {
+public:
+    std::set<Session *> onlineSessionSet;
+    int index;
+};
 
 class Poller {
 public:
@@ -21,6 +26,8 @@ public:
     virtual int onReadMsg(Session &conn, int bytesNum) { return bytesNum; }
 
     virtual int onWriteBytes(Session &conn, int len) { return 0; }
+
+    virtual int onDisconnect(Session &conn) { return 0; }
 
     int sendMsg(Session &conn, const Msg &msg);
 
@@ -53,9 +60,7 @@ protected:
     struct kevent *events = NULL;
     std::vector<struct kevent> event_set;
     std::vector<struct kevent *> event_list;
-
-
-
+    std::vector<Worker*> workerVec;
 };
 
 #endif /* KQUEUEPOLLER_H */

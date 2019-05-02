@@ -51,6 +51,8 @@ void Poller::closeSession(Session &conn) {
     conn.readBuffer.size = -1;
     conn.writeBuffer.size = -1;
     closeSocket(conn.sessionId);
+    this->workerVec[index]->onlineSessionSet.erase(&conn);
+    this->onDisconnect(conn);
 }
 
 int Poller::sendMsg(Session &conn, const Msg &msg) {
@@ -186,7 +188,8 @@ void Poller::workerThreadCB(int index) {
                 evReg.events = EPOLLIN | EPOLLONESHOT;
                 this->sessions[clientFd]->sessionId = clientFd;
                 epoll_ctl(this->epolls[index], EPOLL_CTL_ADD, clientFd, &evReg);
-
+                this->workerVec[index]->onlineSessionSet.insert(conn);
+                this->onAccept(*sessions[clientFd], Addr());
             }
 
         }
@@ -309,6 +312,12 @@ int Poller::run() {
     }
     {/* create listen*/
         this->createListenSocket(port);
+    }
+    for(int i = 0; i < this->maxWorker; i++)
+    {
+        Worker* worker = new (xmalloc(sizeof(Worker))) Worker();
+        worker->index = i;
+        workerVec.push_back(worker);
     }
     {/* start workers*/
         for (int i = 0; i < this->maxWorker; ++i) {

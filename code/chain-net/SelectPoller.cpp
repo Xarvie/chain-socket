@@ -67,7 +67,7 @@ int Poller::handleReadEvent(Session &conn) {
         int err = getSockError();
 
         if (!IsEagain()) {
-            printf("err: recv %d", err);
+            printf("err: recv %d\n", err);
             return -1;
         }
     }
@@ -120,6 +120,8 @@ void Poller::closeSession(Session &conn) {
     conn.readBuffer.size = -1;
     conn.writeBuffer.size = -1;
     closeSocket(conn.sessionId);
+    this->workerVec[index]->onlineSessionSet.erase(&conn);
+    this->onDisconnect(conn);
 }
 
 void Poller::workerThreadCB(int index) {
@@ -162,8 +164,11 @@ void Poller::workerThreadCB(int index) {
 #endif
 
                 acceptClientFdsVec.insert((uint64_t) event.fd);
-                sessions[clientFd]->readBuffer.size = 0;
-                sessions[clientFd]->writeBuffer.size = 0;
+                auto * conn = sessions[clientFd];
+                conn->readBuffer.size = 0;
+                conn->writeBuffer.size = 0;
+                this->workerVec[index]->onlineSessionSet.insert(conn);
+                this->onAccept(*conn,Addr());
             }
 
         }
@@ -256,6 +261,15 @@ int Poller::run() {
     {/* create listen*/
         this->createListenSocket(port);
     }
+
+    for(int i = 0; i < this->maxWorker; i++)
+    {
+        Worker* worker = new (xmalloc(sizeof(Worker))) Worker();
+        worker->index = i;
+        workerVec.push_back(worker);
+    }
+
+
     {/* start workers*/
         for (int i = 0; i < this->maxWorker; ++i) {
             workThreads.emplace_back(std::thread([=] { this->workerThreadCB(i); }));

@@ -77,7 +77,7 @@ public:
     std::vector<Session*> sessions;
     std::vector<moodycamel::ConcurrentQueue<int>> taskQueue;
     std::recursive_mutex *xxx = NULL;
-
+    std::vector<Worker*> workerVec;
 };
 
 #endif

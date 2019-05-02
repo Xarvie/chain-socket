@@ -208,6 +208,7 @@ void Poller::listenThreadCB() {
             exit(-16);
         }
         this->onAccept(sdAccept, Addr());
+        this->workerVec[index]->onlineSessionSet.insert(conn);
         int workerId = sdAccept / 4 % maxWorker;
         lpPerSocketContext = UpdateCompletionPort(workerId, sdAccept, ClientIoRead, TRUE);
         if (lpPerSocketContext == nullptr)
