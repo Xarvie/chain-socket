@@ -33,3 +33,6 @@
 
 # CLion folder
 .idea
+
+# VS Code
+.vscode
