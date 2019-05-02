@@ -88,7 +88,7 @@ void Poller::workerThreadCB(int pollerIndex) {
                     if (kevent(this->queue[pollerIndex], &event_set[pollerIndex], 1, NULL, 0, NULL) == -1) {
                         printf("error\n");
                     }
-                    this->workerVec[index]->onlineSessionSet.insert(conn);
+                    this->workerVec[pollerIndex]->onlineSessionSet.insert(conn);
                     this->onAccept(*conn, Addr());
                 }
             }
