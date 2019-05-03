@@ -1,5 +1,5 @@
 #include "SystemReader.h"
-#if defined(OS_WINDOWS) && !defined(SELECT_SERVER)
+#if defined(XOS_WINDOWS) && !defined(SELECT_SERVER)
 
 #ifndef IOCPSERVER_H
 #define IOCPSERVER_H
