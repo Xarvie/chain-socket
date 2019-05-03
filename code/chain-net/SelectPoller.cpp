@@ -110,10 +110,10 @@ void Poller::closeSession(Session &conn) {
 #else
     int index = conn.sessionId % this->maxWorker;
 #endif
-    std::set<uint64_t> &clientVec = this->clients[index];
+    std::set<uint64_t> &clientSet = this->clients[index];
     std::set<uint64_t> &acceptClientFdsVec = this->acceptClientFds[index];
     acceptClientFdsVec.erase(conn.sessionId);
-    clientVec.erase(conn.sessionId);
+    clientSet.erase(conn.sessionId);
     linger lingerStruct;
 
     lingerStruct.l_onoff = 1;
@@ -176,7 +176,6 @@ void Poller::workerThreadCB(int index) {
                 this->workerVec[index]->onlineSessionSet.insert(conn);
 
                 this->onAccept(*conn, Addr());
-                break;
             }
             if (event.event == CHECK_HEARTBEATS) {
                 for(auto& E : this->workerVec[index]->onlineSessionSet)
@@ -188,9 +187,6 @@ void Poller::workerThreadCB(int index) {
                     {
                         auto& conn = *this->sessions[E->sessionId];
                         disconnectSet.insert(&conn);
-                        this->closeSession(*E);
-
-
                     } else{
                         E->heartBeats--;
                     }
@@ -200,7 +196,6 @@ void Poller::workerThreadCB(int index) {
                     for(auto& E :disconnectSet)
                     {
                         this->closeSession(*E);
-                        clientSet.erase(E->sessionId);
                     }
 
                     disconnectSet.clear();

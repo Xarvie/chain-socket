@@ -39,7 +39,7 @@ Poller::~Poller() {
 }
 
 void Poller::closeSession(Session &conn) {
-    if (conn.readBuffer.size < 0 || conn.writeBuffer.size < 0)
+    if (conn.heartBeats == 0)
         return;
     int index = conn.sessionId % this->maxWorker;
     linger lingerStruct;
@@ -48,14 +48,17 @@ void Poller::closeSession(Session &conn) {
     lingerStruct.l_linger = 0;
     setsockopt(conn.sessionId, SOL_SOCKET, SO_LINGER,
                (char *) &lingerStruct, sizeof(lingerStruct));
-    conn.readBuffer.size = -1;
-    conn.writeBuffer.size = -1;
+    conn.readBuffer.size = 0;
+    conn.writeBuffer.size = 0;
+    conn.heartBeats = 0;
     closeSocket(conn.sessionId);
     this->workerVec[index]->onlineSessionSet.erase(&conn);
     this->onDisconnect(conn);
 }
 
 int Poller::sendMsg(Session &conn, const Msg &msg) {
+    if(conn.heartBeats == 0)
+        return -1;
     int fd = conn.sessionId;
     int len = msg.len;
     unsigned char *data = msg.buff;
@@ -87,7 +90,7 @@ int Poller::sendMsg(Session &conn, const Msg &msg) {
 }
 
 int Poller::handleReadEvent(Session &conn) {
-    if (conn.readBuffer.size < 0)
+    if (conn.heartBeats == 0)
         return -1;
     static Msg msg;
     unsigned char *buff = conn.readBuffer.buff + conn.readBuffer.size;
@@ -101,6 +104,8 @@ int Poller::handleReadEvent(Session &conn) {
             return -1;
             //TODO close socket
         }
+         conn.heartBeats = HEARTBEATS_COUNT;
+
         //TODO
         int readBytes = onReadMsg(conn, ret);
         conn.readBuffer.size -= readBytes;
@@ -118,12 +123,10 @@ int Poller::handleReadEvent(Session &conn) {
 }
 
 int Poller::handleWriteEvent(Session &conn) {
+    if (conn.heartBeats == 0)
+        return -1;
     if (conn.writeBuffer.size == 0)
         return 0;
-
-    if (conn.writeBuffer.size < 0)
-        return -1;
-
 
     int ret = write(conn.sessionId, (void *) conn.writeBuffer.buff,
                     conn.writeBuffer.size);
@@ -149,7 +152,8 @@ void Poller::workerThreadCB(int index) {
 
     struct epoll_event event[30];
     struct epoll_event evReg;
-    sockInfo task;
+    sockInfo task = {0};
+    std::set<Session *> disconnectSet;
     moodycamel::ConcurrentQueue<sockInfo> &queue = taskQueue[index];
     while (this->isRunning) {
         while (queue.try_dequeue(task)) {
@@ -183,7 +187,7 @@ void Poller::workerThreadCB(int index) {
 
                 sessions[clientFd]->readBuffer.size = 0;
                 sessions[clientFd]->writeBuffer.size = 0;
-
+                conn->heartBeats = HEARTBEATS_COUNT;
                 evReg.data.fd = clientFd;
                 evReg.events = EPOLLIN | EPOLLONESHOT;
                 this->sessions[clientFd]->sessionId = clientFd;
@@ -191,7 +195,33 @@ void Poller::workerThreadCB(int index) {
                 this->workerVec[index]->onlineSessionSet.insert(conn);
                 this->onAccept(*sessions[clientFd], Addr());
             }
+            else if (event.event == CHECK_HEARTBEATS) {
+                for(auto& E : this->workerVec[index]->onlineSessionSet)
+                {
+                    if(E->heartBeats==0)
+                        continue;
 
+                    if(E->heartBeats == 1)
+                    {
+                        auto& conn = *this->sessions[E->sessionId];
+                        disconnectSet.insert(&conn);
+                        this->closeSession(*E);
+
+
+                    } else{
+                        E->heartBeats--;
+                    }
+                }
+                if(disconnectSet.size() > 0)
+                {
+                    for(auto& E :disconnectSet)
+                    {
+                        this->closeSession(*E);
+                    }
+
+                    disconnectSet.clear();
+                }
+            }
         }
 
         int numEvents = epoll_wait(epfd, event, 30, 1000);//TODO wait 1
@@ -223,6 +253,10 @@ void Poller::workerThreadCB(int index) {
                 epoll_ctl(epfd, EPOLL_CTL_MOD, conn.sessionId, &evReg);
             }
         }
+    }
+    std::set<Session*> backset = this->workerVec[index]->onlineSessionSet;
+    for (auto &E : backset) {
+        this->closeSession(*sessions[E]);
     }
 }
 
@@ -327,7 +361,22 @@ int Poller::run() {
     {/* start listen*/
         listenThread = std::thread([=] { this->listenThreadCB(); });
     }
+
+        this->heartBeatsThread = std::thread([this] {
+        while(this->isRunning) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(HEARTBEATS_INTERVAL * 1000));
+            for (auto &E : this->taskQueue) {
+                static sockInfo s;
+                s.event = CHECK_HEARTBEATS;
+                E.enqueue(s);
+            }
+        }
+
+    });
+
+
     {/* wait exit*/
+        this->heartBeatsThread.join();
         listenThread.join();
         for (auto &E: this->workThreads) {
             E.join();

@@ -87,6 +87,7 @@ struct Msg {
 
 enum {
     ACCEPT_EVENT,
+    CHECK_HEARTBEATS,
     RW_EVENT
 };
 enum {

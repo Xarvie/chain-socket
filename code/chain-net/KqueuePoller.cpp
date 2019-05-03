@@ -51,8 +51,8 @@ void Poller::workerThreadCB(int pollerIndex) {
     bool dequeueRet = false;
     sockInfo event1;
     moodycamel::ConcurrentQueue<sockInfo> &queue = taskQueue[pollerIndex];
-
-    while (1) {
+    std::set<Session *> disconnectSet;
+    while (this->isRunning) {
         while (queue.try_dequeue(event1)) {
             if (event1.event == ACCEPT_EVENT) {
                 int ret = 0;
@@ -88,9 +88,38 @@ void Poller::workerThreadCB(int pollerIndex) {
                     if (kevent(this->queue[pollerIndex], &event_set[pollerIndex], 1, NULL, 0, NULL) == -1) {
                         printf("error\n");
                     }
+                    conn->readBuffer.size = 0;
+                    conn->writeBuffer.size = 0;
+                    conn->heartBeats = HEARTBEATS_COUNT;
                     this->workerVec[pollerIndex]->onlineSessionSet.insert(conn);
                     this->onAccept(*conn, Addr());
                 }
+                else if (event1.event == CHECK_HEARTBEATS) {
+                    for(auto& E : this->workerVec[pollerIndex]->onlineSessionSet)
+                    {
+                        if(E->heartBeats==0)
+                            continue;
+
+                        if(E->heartBeats == 1)
+                        {
+                            auto& conn = *this->sessions[E->sessionId];
+                            disconnectSet.insert(&conn);
+                            this->closeSession(*E);
+
+
+                        } else{
+                            E->heartBeats--;
+                        }
+                    }
+                    if(disconnectSet.size() > 0)
+                    {
+                        for(auto& E :disconnectSet)
+                        {
+                            this->closeSession(*E);
+                        }
+
+                        disconnectSet.clear();
+                    }
             }
         }
         struct timespec timeout;
@@ -127,6 +156,10 @@ void Poller::workerThreadCB(int pollerIndex) {
             }
         }
     }
+    std::set<Session*> backset = this->workerVec[pollerIndex]->onlineSessionSet;
+    for (auto &E : backset) {
+        this->closeSession(*sessions[E]);
+    }
 }
 
 void Poller::listenThreadCB() {
@@ -156,7 +189,7 @@ void Poller::listenThreadCB() {
 int Poller::handleReadEvent(struct kevent *event) {
     int sock = event->ident;
     Session *conn = this->sessions[sock];
-    if (conn->readBuffer.size < 0)
+    if (conn.heartBeats == 0)
         return -1;
     unsigned char *buff = conn->readBuffer.buff + conn->readBuffer.size;
 
@@ -168,6 +201,8 @@ int Poller::handleReadEvent(struct kevent *event) {
             return -1;
             //TODO close socket
         }
+        conn.heartBeats = HEARTBEATS_COUNT;
+
         //TODO
         int readBytes = onReadMsg(*conn, ret);
         conn->readBuffer.size -= readBytes;
@@ -187,11 +222,12 @@ int Poller::handleWriteEvent(struct kevent *event) {
     int sock = event->ident;
     int pollerIndex = sock % this->maxWorker;
     Session *conn = sessions[sock];
+
+    if (conn.heartBeats == 0)
+        return -1;
     if (conn->writeBuffer.size == 0)
         return 0;
 
-    if (conn->writeBuffer.size < 0)
-        return -1;
 
     int ret = send(conn->sessionId, (void *) conn->writeBuffer.buff,
                    conn->writeBuffer.size, 0);
@@ -211,9 +247,8 @@ int Poller::handleWriteEvent(struct kevent *event) {
 }
 
 void Poller::closeSession(Session &conn) {
-
-    if (conn.readBuffer.size < 0 || conn.writeBuffer.size < 0)
-        return;
+    if (conn.heartBeats == 0)
+        return ;
     int index = conn.sessionId % this->maxWorker;
     linger lingerStruct;
 
@@ -221,8 +256,9 @@ void Poller::closeSession(Session &conn) {
     lingerStruct.l_linger = 0;
     setsockopt(conn.sessionId, SOL_SOCKET, SO_LINGER,
                (char *) &lingerStruct, sizeof(lingerStruct));
-    conn.readBuffer.size = -1;
-    conn.writeBuffer.size = -1;
+    conn.readBuffer.size = 0;
+    conn.writeBuffer.size = 0;
+    conn.heartBeats = 0;
     EV_SET(&event_set[index], conn.sessionId, EVFILT_READ, EV_DELETE, 0, 0, NULL);
     EV_SET(&event_set[index], conn.sessionId, EVFILT_WRITE, EV_DELETE, 0, 0, NULL);
 
@@ -285,6 +321,19 @@ int Poller::run() {
 
     listenThread = std::thread([=] { this->listenThreadCB(); });//TODO
 
+    this->heartBeatsThread = std::thread([this] {
+        while(this->isRunning) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(HEARTBEATS_INTERVAL * 1000));
+            for (auto &E : this->taskQueue) {
+                static sockInfo s;
+                s.event = CHECK_HEARTBEATS;
+                E.enqueue(s);
+            }
+        }
+
+    });
+
+    this->heartBeatsThread.join();
     listenThread.join();
     for (auto &E:workThreads) {
         E.join();
@@ -294,6 +343,8 @@ int Poller::run() {
 }
 
 int Poller::sendMsg(Session& conn, const Msg &msg) {
+    if (conn.heartBeats == 0)
+        return -1;
     unsigned char *data = msg.buff;
     int fd = conn.sessionId;
     int len = msg.len;

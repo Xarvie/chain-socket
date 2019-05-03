@@ -50,6 +50,7 @@ protected:
 
     enum {
         ACCEPT_EVENT,
+        CHECK_HEARTBEATS,
         RW_EVENT
     };
     enum {
@@ -69,6 +70,7 @@ protected:
     std::vector<moodycamel::ConcurrentQueue<sockInfo> > taskQueue;
     volatile bool isRunning = false;
     std::vector<Worker*> workerVec;
+    std::thread heartBeatsThread;
 };
 
 #endif /* SERVER_EPOLLPOLL_H_ */

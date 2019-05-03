@@ -61,6 +61,7 @@ protected:
     std::vector<struct kevent> event_set;
     std::vector<struct kevent *> event_list;
     std::vector<Worker*> workerVec;
+    std::thread heartBeatsThread;
 };
 
 #endif /* KQUEUEPOLLER_H */
