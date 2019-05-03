@@ -264,9 +264,9 @@ void Poller::workerThreadCB(int index) {
 
         }
     }
-    std::set<uint64_t> backset = clientSet;
+    std::set<Session*> backset = this->workerVec[index]->onlineSessionSet;
     for (auto &E : backset) {
-        this->closeSession(*sessions[E]);
+        this->closeSession(*E);
     }
 }
 

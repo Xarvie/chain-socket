@@ -179,10 +179,10 @@ void Poller::workerThreadCB(int index) {
 #else
                 int flags = fcntl(clientFd, F_GETFL, 0);
                 if (flags < 0)
-                    printf("err: F_GETFL\n");
-
-                if(fcntl(clientFd, F_SETFL, flags | O_NONBLOCK) < 0);
-                    printf("err: F_SETFL\n");
+                    printf("err: F_GETFL \n");
+                ret = fcntl(clientFd, F_SETFL, flags | O_NONBLOCK);
+                if(ret < 0)
+                    printf("err: F_SETFL \n");
 #endif
                 auto* conn = sessions[clientFd];
                 sessions[clientFd]->readBuffer.size = 0;
