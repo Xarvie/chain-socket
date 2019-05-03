@@ -205,9 +205,6 @@ void Poller::workerThreadCB(int index) {
                     {
                         auto& conn = *this->sessions[E->sessionId];
                         disconnectSet.insert(&conn);
-                        this->closeSession(*E);
-
-
                     } else{
                         E->heartBeats--;
                     }

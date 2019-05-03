@@ -94,38 +94,33 @@ void Poller::workerThreadCB(int pollerIndex) {
                     this->workerVec[pollerIndex]->onlineSessionSet.insert(conn);
                     this->onAccept(*conn, Addr());
                 }
-                else if (event1.event == CHECK_HEARTBEATS) {
-                    for(auto& E : this->workerVec[pollerIndex]->onlineSessionSet)
-                    {
-                        if(E->heartBeats==0)
-                            continue;
 
-                        if(E->heartBeats == 1)
-                        {
-                            auto& conn = *this->sessions[E->sessionId];
-                            disconnectSet.insert(&conn);
-                            this->closeSession(*E);
+            }
+            else if (event1.event == CHECK_HEARTBEATS) {
+                for (auto &E : this->workerVec[pollerIndex]->onlineSessionSet) {
+                    if (E->heartBeats == 0)
+                        continue;
 
-
-                        } else{
-                            E->heartBeats--;
-                        }
+                    if (E->heartBeats == 1) {
+                        auto &conn = *this->sessions[E->sessionId];
+                        disconnectSet.insert(&conn);
+                    } else {
+                        E->heartBeats--;
                     }
-                    if(disconnectSet.size() > 0)
-                    {
-                        for(auto& E :disconnectSet)
-                        {
-                            this->closeSession(*E);
-                        }
-
-                        disconnectSet.clear();
+                }
+                if (disconnectSet.size() > 0) {
+                    for (auto &E :disconnectSet) {
+                        this->closeSession(*E);
                     }
+
+                    disconnectSet.clear();
+                }
             }
         }
         struct timespec timeout;
         timeout.tv_sec = 1;
         timeout.tv_nsec = 0;
-        nev = kevent(this->queue[pollerIndex], NULL, 0, event_list[pollerIndex], 32, &timeout);
+        nev = kevent(this->queue[pollerIndex], nullptr, 0, event_list[pollerIndex], 32, &timeout);
         if (nev == 0) {
 
             continue;
@@ -158,7 +153,7 @@ void Poller::workerThreadCB(int pollerIndex) {
     }
     std::set<Session*> backset = this->workerVec[pollerIndex]->onlineSessionSet;
     for (auto &E : backset) {
-        this->closeSession(*sessions[E]);
+        this->closeSession(*E);
     }
 }
 
@@ -189,7 +184,7 @@ void Poller::listenThreadCB() {
 int Poller::handleReadEvent(struct kevent *event) {
     int sock = event->ident;
     Session *conn = this->sessions[sock];
-    if (conn.heartBeats == 0)
+    if (conn->heartBeats == 0)
         return -1;
     unsigned char *buff = conn->readBuffer.buff + conn->readBuffer.size;
 
@@ -201,7 +196,7 @@ int Poller::handleReadEvent(struct kevent *event) {
             return -1;
             //TODO close socket
         }
-        conn.heartBeats = HEARTBEATS_COUNT;
+        conn->heartBeats = HEARTBEATS_COUNT;
 
         //TODO
         int readBytes = onReadMsg(*conn, ret);
@@ -223,7 +218,7 @@ int Poller::handleWriteEvent(struct kevent *event) {
     int pollerIndex = sock % this->maxWorker;
     Session *conn = sessions[sock];
 
-    if (conn.heartBeats == 0)
+    if (conn->heartBeats == 0)
         return -1;
     if (conn->writeBuffer.size == 0)
         return 0;
