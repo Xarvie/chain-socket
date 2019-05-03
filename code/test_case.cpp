@@ -38,7 +38,7 @@ public:
 };
 
 int main() {
-    Server sx(9876, 4);
+    Server sx(9876, 1);
     sx.run();
 
     return 0;

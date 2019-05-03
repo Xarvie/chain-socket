@@ -48,7 +48,9 @@
 #define CONN_MAXFD 65535
 
 enum xx {
-    BUFFER_SIZE = 8192
+    BUFFER_SIZE = 8192,
+    HEARTBEATS_COUNT = 3,
+    HEARTBEATS_INTERVAL = 3,
 };
 
 #define xmalloc malloc

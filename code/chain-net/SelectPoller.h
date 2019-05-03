@@ -49,6 +49,7 @@ protected:
 
     enum {
         ACCEPT_EVENT,
+        CHECK_HEARTBEATS,
         RW_EVENT
     };
     enum {
@@ -67,6 +68,7 @@ protected:
     std::vector<std::set<uint64_t>> clients;
     std::vector<std::set<uint64_t>> acceptClientFds;
     std::vector<Worker*> workerVec;
+    std::thread heartBeatsThread;
 };
 
 #endif //SERVER_SELECTSERVER_H

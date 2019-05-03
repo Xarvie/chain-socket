@@ -169,7 +169,7 @@ void Poller::workerThreadCB(int index) {
                     perror("err: nodelay\n");
 #if defined(OS_WINDOWS)
                 unsigned long ul = 1;
-                ret = ioctlsocket(clientFd, FIONBIO, (unsigned long *) &ul);//设置成非阻塞模式。
+                ret = ioctlsocket(clientFd, FIONBIO, (unsigned long *) &ul);
                 if (ret == SOCKET_ERROR)
                     printf("err: ioctlsocket");
 #else

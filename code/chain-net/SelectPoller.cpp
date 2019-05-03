@@ -17,6 +17,8 @@ Poller::Poller(int port, int threadsNum) {
 }
 
 int Poller::sendMsg(Session &conn, const Msg &msg) {
+    if (conn.heartBeats == 0)
+        return -1;
     unsigned char *data = msg.buff;
     int len = msg.len;
     int leftBytes = 0;
@@ -45,7 +47,7 @@ int Poller::sendMsg(Session &conn, const Msg &msg) {
 }
 
 int Poller::handleReadEvent(Session &conn) {
-    if (conn.readBuffer.size < 0)
+    if (conn.heartBeats == 0)
         return -1;
     unsigned char *buff = conn.readBuffer.buff + conn.readBuffer.size;
     int ret = recv(conn.sessionId, (char *) buff, conn.readBuffer.capacity - conn.readBuffer.size, 0);
@@ -57,6 +59,7 @@ int Poller::handleReadEvent(Session &conn) {
             return -1;
         }
         //TODO
+        conn.heartBeats = HEARTBEATS_COUNT;
         int readBytes = onReadMsg(conn, ret);
         conn.readBuffer.size -= readBytes;
         if (conn.readBuffer.size < 0)
@@ -75,10 +78,11 @@ int Poller::handleReadEvent(Session &conn) {
 }
 
 int Poller::handleWriteEvent(Session &conn) {
+    if (conn.heartBeats == 0)
+        return -1;
+
     if (conn.writeBuffer.size == 0)
         return 0;
-    if (conn.writeBuffer.size < 0)
-        return -1;
 
     int ret = send(conn.sessionId, (char *) conn.writeBuffer.buff,
                    conn.writeBuffer.size, 0);
@@ -99,7 +103,7 @@ int Poller::handleWriteEvent(Session &conn) {
 }
 
 void Poller::closeSession(Session &conn) {
-    if (conn.readBuffer.size < 0 || conn.writeBuffer.size < 0)
+    if (conn.heartBeats == 0)
         return;
 #if defined(OS_WINDOWS)
     int index = conn.sessionId / 4 % this->maxWorker;
@@ -109,27 +113,27 @@ void Poller::closeSession(Session &conn) {
     std::set<uint64_t> &clientVec = this->clients[index];
     std::set<uint64_t> &acceptClientFdsVec = this->acceptClientFds[index];
     acceptClientFdsVec.erase(conn.sessionId);
-
-
+    clientVec.erase(conn.sessionId);
     linger lingerStruct;
 
     lingerStruct.l_onoff = 1;
     lingerStruct.l_linger = 0;
     setsockopt(conn.sessionId, SOL_SOCKET, SO_LINGER,
                (char *) &lingerStruct, sizeof(lingerStruct));
-    conn.readBuffer.size = -1;
-    conn.writeBuffer.size = -1;
+    conn.readBuffer.size = 0;
+    conn.writeBuffer.size = 0;
+    conn.heartBeats = 0;
     closeSocket(conn.sessionId);
     this->workerVec[index]->onlineSessionSet.erase(&conn);
     this->onDisconnect(conn);
 }
 
 void Poller::workerThreadCB(int index) {
-    std::set<uint64_t> &clientVec = this->clients[index];
+    std::set<uint64_t> &clientSet = this->clients[index];
     std::set<uint64_t> &acceptClientFdsVec = this->acceptClientFds[index];
     moodycamel::ConcurrentQueue<sockInfo> &queue = taskQueue[index];
     sockInfo event = {0};
-
+    std::set<Session *> disconnectSet;
     while (this->isRunning) {
         while (queue.try_dequeue(event)) {
             if (event.event == ACCEPT_EVENT) {
@@ -152,7 +156,7 @@ void Poller::workerThreadCB(int index) {
                     printf("err: nodelay");
 #if defined(OS_WINDOWS)
                 unsigned long ul = 1;
-                ret = ioctlsocket(clientFd, FIONBIO, (unsigned long *) &ul);//设置成非阻塞模式。
+                ret = ioctlsocket(clientFd, FIONBIO, (unsigned long *) &ul);
                 if (ret == SOCKET_ERROR)
                     printf("err: ioctlsocket");
 #else
@@ -163,12 +167,45 @@ void Poller::workerThreadCB(int index) {
                 if (ret < 0) printf("err: fcntl");
 #endif
 
-                acceptClientFdsVec.insert((uint64_t) event.fd);
+
+                clientSet.insert((uint64_t) event.fd);
                 auto * conn = sessions[clientFd];
                 conn->readBuffer.size = 0;
                 conn->writeBuffer.size = 0;
+                conn->heartBeats = HEARTBEATS_COUNT;
                 this->workerVec[index]->onlineSessionSet.insert(conn);
-                this->onAccept(*conn,Addr());
+
+                this->onAccept(*conn, Addr());
+                break;
+            }
+            if (event.event == CHECK_HEARTBEATS) {
+                for(auto& E : this->workerVec[index]->onlineSessionSet)
+                {
+                    if(E->heartBeats==0)
+                        continue;
+
+                    if(E->heartBeats == 1)
+                    {
+                        auto& conn = *this->sessions[E->sessionId];
+                        disconnectSet.insert(&conn);
+                        this->closeSession(*E);
+
+
+                    } else{
+                        E->heartBeats--;
+                    }
+                }
+                if(disconnectSet.size() > 0)
+                {
+                    for(auto& E :disconnectSet)
+                    {
+                        this->closeSession(*E);
+                        clientSet.erase(E->sessionId);
+                    }
+
+                    disconnectSet.clear();
+                }
+
             }
 
         }
@@ -184,10 +221,8 @@ void Poller::workerThreadCB(int index) {
             FD_ZERO(&fdExp);
 
             uint64_t maxSock = 0;
-            for (auto &E:acceptClientFdsVec)
-                clientVec.insert(E);
-            acceptClientFdsVec.clear();
-            for (auto &E :clientVec) {
+
+            for (auto &E :clientSet) {
                 FD_SET(E, &fdRead);
                 FD_SET(E, &fdWrite);
                 if (maxSock < E) {
@@ -213,35 +248,31 @@ void Poller::workerThreadCB(int index) {
                 break;
             }
 
+            std::set<uint64_t> backset = clientSet;
             if (ret > 0) {
-                for (auto iter = clientVec.begin(); iter != clientVec.end();) {
+                for (auto iter = backset.begin(); iter != backset.end(); iter++) {
                     uint64_t fd = *iter;
-                    bool needDel = false;
                     if (FD_ISSET(fd, &fdRead)) {
                         if (handleReadEvent(*sessions[fd]) == -1) {
                             this->closeSession(*sessions[fd]);
-                            iter = clientVec.erase(iter);
                             continue;
                         }
                     }
                     if (FD_ISSET(fd, &fdWrite)) {
                         if (handleWriteEvent(*sessions[fd]) == -1) {
                             this->closeSession(*sessions[fd]);
-                            iter = clientVec.erase(iter);
                             continue;
                         }
                     }
-                    iter++;
                 }
             }
 
         }
     }
-
-    for (auto &E : clientVec) {
+    std::set<uint64_t> backset = clientSet;
+    for (auto &E : backset) {
         this->closeSession(*sessions[E]);
     }
-
 }
 
 int Poller::run() {
@@ -278,6 +309,18 @@ int Poller::run() {
     {/* start listen*/
         this->listenThread = std::thread([=] { this->listenThreadCB(); });
     }
+    this->heartBeatsThread = std::thread([this] {
+        while(this->isRunning) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(HEARTBEATS_INTERVAL * 1000));
+            for (auto &E : this->taskQueue) {
+                static sockInfo s;
+                s.event = CHECK_HEARTBEATS;
+                E.enqueue(s);
+            }
+        }
+
+    });
+    this->heartBeatsThread.join();
     this->listenThread.join();
     for (auto &E:workThreads) {
         E.join();
