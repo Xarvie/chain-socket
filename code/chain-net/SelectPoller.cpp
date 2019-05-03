@@ -399,4 +399,9 @@ void Poller::listenThreadCB() {
     }
 }
 
+int Poller::stop()
+{
+    this->isRunning = false;
+    return 0;
+}
 #endif

@@ -372,4 +372,10 @@ int Poller::sendMsg(Session& conn, const Msg &msg) {
     return 0;
 }
 
+int Poller::stop()
+{
+    this->isRunning = false;
+    return 0;
+}
+
 #endif

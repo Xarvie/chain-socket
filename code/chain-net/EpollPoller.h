@@ -34,6 +34,8 @@ public:
 
     int run();
 
+    int stop();
+
     void closeSession(Session &conn);
 
 protected:
