@@ -184,7 +184,7 @@ void Poller::workerThreadCB(int index) {
                 if(fcntl(clientFd, F_SETFL, flags | O_NONBLOCK) < 0);
                     printf("err: F_SETFL\n");
 #endif
-
+                auto* conn = sessions[clientFd];
                 sessions[clientFd]->readBuffer.size = 0;
                 sessions[clientFd]->writeBuffer.size = 0;
                 conn->heartBeats = HEARTBEATS_COUNT;
@@ -195,7 +195,7 @@ void Poller::workerThreadCB(int index) {
                 this->workerVec[index]->onlineSessionSet.insert(conn);
                 this->onAccept(*sessions[clientFd], Addr());
             }
-            else if (event.event == CHECK_HEARTBEATS) {
+            else if (task.event == CHECK_HEARTBEATS) {
                 for(auto& E : this->workerVec[index]->onlineSessionSet)
                 {
                     if(E->heartBeats==0)
@@ -256,7 +256,7 @@ void Poller::workerThreadCB(int index) {
     }
     std::set<Session*> backset = this->workerVec[index]->onlineSessionSet;
     for (auto &E : backset) {
-        this->closeSession(*sessions[E]);
+        this->closeSession(*E);
     }
 }
 

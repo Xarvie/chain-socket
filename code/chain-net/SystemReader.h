@@ -1,6 +1,6 @@
 #pragma once
 
-#define SELECT_SERVER
+//#define SELECT_SERVER
 #if defined(__linux) || defined(__linux__) || defined(linux)
 #define PLATFORM_ID "Linux"
     #define OS_LINUX
