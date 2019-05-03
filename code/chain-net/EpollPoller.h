@@ -49,18 +49,6 @@ protected:
 
     bool createListenSocket(int port);
 
-
-    enum {
-        ACCEPT_EVENT,
-        CHECK_HEARTBEATS,
-        RW_EVENT
-    };
-    enum {
-        REQ_DISCONNECT,
-        REQ_SHUTDOWN,
-        REQ_CONNECT
-    };
-
     std::vector<Session *> sessions;
 
     int maxWorker = 0;
