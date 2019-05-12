@@ -20,8 +20,7 @@
 #include <set>
 
 #if defined(OS_WINDOWS)
-#include <mswsock.h>
-#include <ws2tcpip.h>
+
 #else
 #include <sys/socket.h>
 #include <sys/types.h>
@@ -61,7 +60,7 @@ struct sockInfo
     //TODO move construct
     int port;
     char ip[128];
-    int fd;
+    uint64_t fd;
     int ret;
     char task;/*1:listen 2:connect 3:disconnect*/
     char event;/*1 listen 2:connect*/

@@ -2,8 +2,10 @@
 
 #if defined(SELECT_SERVER)
 
+
 #include "SystemInterface.h"
 #include "SelectPoller.h"
+#include "PrivateHeaders.h"
 
 Poller::Poller(int port, int threadsNum) {
     this->port = port;
@@ -138,8 +140,11 @@ void Poller::workerThreadCB(int index) {
         while (queue.try_dequeue(event)) {
             if (event.event == ACCEPT_EVENT) {
                 int ret = 0;
-                int clientFd = event.fd;
-
+#if defined(OS_WINDOWS)
+				uint64_t clientFd = event.fd;
+#else
+				int clientFd = (int)event.fd;
+#endif
                 int nRcvBufferLen = 80 * 1024;
                 int nSndBufferLen = 1 * 1024 * 1024;
                 int nLen = sizeof(int);
@@ -231,7 +236,7 @@ void Poller::workerThreadCB(int index) {
                 continue;
             }
 
-            int ret = select(maxSock + 1, &fdRead, &fdWrite, &fdExp, &t);
+            int ret = select((int)maxSock + 1, &fdRead, &fdWrite, &fdExp, &t);
 
             if (ret < 0) {
 

@@ -28,11 +28,11 @@ public:
         if(newSize >= capacity - BUFFER_SIZE * 2)
         {
             this->capacity = (((size + len)/BUFFER_SIZE)+3)*BUFFER_SIZE;
-            this->buff = (unsigned char*)::realloc(this->buff, this->capacity);
-            if(buff == nullptr)
-                ;//TODO
+			void* tmpBuff = ::realloc(this->buff, this->capacity);
+			if (tmpBuff == nullptr)
+				abort();//TODO
+			this->buff = (unsigned char*)tmpBuff;
         }
-
         memcpy(this->buff + size, buff1, len);
         this->size += len;
     }
@@ -45,9 +45,11 @@ public:
         }
         int newSize = ((this->size / BUFFER_SIZE)+3)*BUFFER_SIZE;
         this->capacity = newSize;
-        this->buff = (unsigned char*)::realloc(this->buff, this->capacity);
-        if(buff == nullptr)
-            ;//TODO
+		void* tmpBuff = ::realloc(this->buff, this->capacity);
+		if (buff == nullptr)
+			abort();//TODO
+        this->buff = (unsigned char*)tmpBuff;
+
 
     }
 
@@ -57,7 +59,7 @@ public:
     }
     inline void erase(int len)
     {
-        memmove(this->buff, this->buff+len, this->size - len);
+        memmove(this->buff, this->buff+len, (size_t)this->size - len);
         this->size -= len;
     }
 //private:

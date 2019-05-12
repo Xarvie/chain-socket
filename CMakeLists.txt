@@ -1,4 +1,4 @@
-PROJECT(server)
+PROJECT(chain-net)
 cmake_minimum_required (VERSION 3.2)
 list(APPEND CMAKE_MODULE_PATH
   "${CMAKE_SOURCE_DIR}/cmake/macros")
@@ -22,18 +22,18 @@ MakeFilter(
     ${CMAKE_CURRENT_SOURCE_DIR}/code)
 
 IF(CMAKE_SYSTEM_NAME MATCHES "Linux")
-    #set(CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} -g")
+    set(CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} -g")
 ENDIF()
-set(CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} -g")
-ADD_EXECUTABLE(main
+
+ADD_EXECUTABLE(chain-net
     ${CODEFILES})
-target_include_directories(main
+target_include_directories(chain-net
         PUBLIC ${INCLUDEDIRS})
 
 IF(CMAKE_SYSTEM_NAME MATCHES "Windows")
-    target_link_libraries(main pthread ws2_32)
+    target_link_libraries(chain-net ws2_32)
 ELSE()
-    target_link_libraries(main pthread)
+    target_link_libraries(chain-net pthread)
 ENDIF()
 
 
