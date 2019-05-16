@@ -90,7 +90,6 @@ protected:
     int port = 0;
     volatile bool isRunning = false;
     std::vector<std::thread> workThreads;
-    std::thread logicWorker;
     std::thread listenThread;
     std::vector<moodycamel::ConcurrentQueue<sockInfo>> taskQueue;
     std::vector<std::set<uint64_t>> clients;
@@ -99,6 +98,7 @@ protected:
     std::thread heartBeatsThread;
 
     TimerManager *tm;
+    std::thread logicWorker;
     moodycamel::ConcurrentQueue<sockInfo> logicTaskQueue;
 };
 

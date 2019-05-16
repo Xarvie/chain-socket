@@ -66,6 +66,8 @@ protected:
 
     bool createListenSocket(int port);
 
+    void logicWorkerThreadCB();
+
     std::vector<Session *> sessions;
 
     int maxWorker = 0;
@@ -80,6 +82,7 @@ protected:
     std::thread heartBeatsThread;
 
     TimerManager *tm;
+    std::thread logicWorker;
     moodycamel::ConcurrentQueue<sockInfo> logicTaskQueue;
 };
 

@@ -194,7 +194,7 @@ void Poller::workerThreadCB(int index) {
                 Session &conn = *this->sessions[sock];
                 if (event[i].events & EPOLLOUT) {
                     if (this->handleWriteEvent(conn) == -1) {
-                        this->workerVec[index]->evVec.emplace_back(std::pair<Session*, int>(sessions[fd], REQ_DISCONNECT));
+                        this->workerVec[index]->evVec.emplace_back(std::pair<Session*, int>(sessions[sock], REQ_DISCONNECT));
 
                         continue;
                     }
@@ -202,7 +202,7 @@ void Poller::workerThreadCB(int index) {
 
                 if (event[i].events & EPOLLIN) {
                     if (this->handleReadEvent(conn) == -1) {
-                        this->workerVec[index]->evVec.emplace_back(std::pair<Session*, int>(sessions[fd], REQ_DISCONNECT));
+                        this->workerVec[index]->evVec.emplace_back(std::pair<Session*, int>(sessions[sock], REQ_DISCONNECT));
 
                         continue;
                     }
@@ -405,8 +405,8 @@ void Poller::logicWorkerThreadCB() {
                 {
 
                 int ret = 0;
-                int clientFd = task.fd;
-
+                int clientFd = event.fd;
+                int index = clientFd / 4 % maxWorker;
                 int nRcvBufferLen = 80 * 1024;
                 int nSndBufferLen = 1 * 1024 * 1024;
                 int nLen = sizeof(int);
@@ -434,8 +434,9 @@ void Poller::logicWorkerThreadCB() {
                 sessions[clientFd]->readBuffer.size = 0;
                 sessions[clientFd]->writeBuffer.size = 0;
                 conn->heartBeats = HEARTBEATS_COUNT;
+                struct epoll_event evReg;
                 evReg.data.fd = clientFd;
-                evReg.events = EPOLLIN | EPOLLONESHOT;
+                evReg.events = EPOLLIN;
                 this->sessions[clientFd]->sessionId = clientFd;
                 epoll_ctl(this->epolls[index], EPOLL_CTL_ADD, clientFd, &evReg);
                 this->workerVec[index]->onlineSessionSet.insert(conn);
