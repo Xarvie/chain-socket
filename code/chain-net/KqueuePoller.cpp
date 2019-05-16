@@ -387,7 +387,7 @@ void Poller::logicWorkerThreadCB() {
                 case ACCEPT_EVENT:
                 {
                 int ret = 0;
-                int clientFd = event1.fd;
+                int clientFd = event.fd;
 
                 {
                     int nodelay = 1;
