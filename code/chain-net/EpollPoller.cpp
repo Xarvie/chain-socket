@@ -5,6 +5,7 @@
 
 #include "EpollPoller.h"
 #include "SystemInterface.h"
+#include "Timer.h"
 
 Poller::Poller(int port, int threadsNum) {
     this->port = port;
@@ -90,7 +91,7 @@ int Poller::sendMsg(Session &conn, const Msg &msg) {
 }
 
 int Poller::handleReadEvent(Session &conn) {
-    if (conn.heartBeats == 0)
+    if (conn.heartBeats == 0 || conn.readBuffer.size > 1024 * 1024 * 3)
         return -1;
     static Msg msg;
     unsigned char *buff = conn.readBuffer.buff + conn.readBuffer.size;
@@ -107,10 +108,10 @@ int Poller::handleReadEvent(Session &conn) {
          conn.heartBeats = HEARTBEATS_COUNT;
 
         //TODO
-        int readBytes = onReadMsg(conn, ret);
-        conn.readBuffer.size -= readBytes;
-        if (conn.readBuffer.size < 0)
-            return -1;
+        //int readBytes = onReadMsg(conn, ret);
+        //conn.readBuffer.size -= readBytes;
+        //if (conn.readBuffer.size < 0)
+        //    return -1;
     } else if (ret == 0) {
         return -1;
     } else {
@@ -154,48 +155,13 @@ void Poller::workerThreadCB(int index) {
     struct epoll_event evReg;
     sockInfo task = {0};
     std::set<Session *> disconnectSet;
+
     moodycamel::ConcurrentQueue<sockInfo> &queue = taskQueue[index];
     while (this->isRunning) {
+        std::this_thread::sleep_for(std::chrono::microseconds(1));
+        this->workerVec[index]->lock.lock();
         while (queue.try_dequeue(task)) {
-            if (task.event == ACCEPT_EVENT) {
-                int ret = 0;
-                int clientFd = task.fd;
-
-                int nRcvBufferLen = 80 * 1024;
-                int nSndBufferLen = 1 * 1024 * 1024;
-                int nLen = sizeof(int);
-
-                setsockopt(clientFd, SOL_SOCKET, SO_SNDBUF, (char *) &nSndBufferLen, nLen);
-                setsockopt(clientFd, SOL_SOCKET, SO_RCVBUF, (char *) &nRcvBufferLen, nLen);
-                int nodelay = 1;
-                if (setsockopt(clientFd, IPPROTO_TCP, TCP_NODELAY, &nodelay,
-                               sizeof(nodelay)) < 0)
-                    perror("err: nodelay\n");
-#if defined(OS_WINDOWS)
-                unsigned long ul = 1;
-                ret = ioctlsocket(clientFd, FIONBIO, (unsigned long *) &ul);
-                if (ret == SOCKET_ERROR)
-                    printf("err: ioctlsocket");
-#else
-                int flags = fcntl(clientFd, F_GETFL, 0);
-                if (flags < 0)
-                    printf("err: F_GETFL \n");
-                ret = fcntl(clientFd, F_SETFL, flags | O_NONBLOCK);
-                if(ret < 0)
-                    printf("err: F_SETFL \n");
-#endif
-                auto* conn = sessions[clientFd];
-                sessions[clientFd]->readBuffer.size = 0;
-                sessions[clientFd]->writeBuffer.size = 0;
-                conn->heartBeats = HEARTBEATS_COUNT;
-                evReg.data.fd = clientFd;
-                evReg.events = EPOLLIN | EPOLLONESHOT;
-                this->sessions[clientFd]->sessionId = clientFd;
-                epoll_ctl(this->epolls[index], EPOLL_CTL_ADD, clientFd, &evReg);
-                this->workerVec[index]->onlineSessionSet.insert(conn);
-                this->onAccept(*sessions[clientFd], Addr());
-            }
-            else if (task.event == CHECK_HEARTBEATS) {
+            if (task.event == CHECK_HEARTBEATS) {
                 for(auto& E : this->workerVec[index]->onlineSessionSet)
                 {
                     if(E->heartBeats==0)
@@ -209,18 +175,15 @@ void Poller::workerThreadCB(int index) {
                         E->heartBeats--;
                     }
                 }
-                if(disconnectSet.size() > 0)
-                {
-                    for(auto& E :disconnectSet)
-                    {
-                        this->closeSession(*E);
+                if (disconnectSet.size() > 0) {
+                    for (auto &E :disconnectSet) {
+                        this->workerVec[index]->evVec.emplace_back(std::pair<Session*, int>(E, REQ_DISCONNECT));
                     }
-
-                    disconnectSet.clear();
                 }
             }
         }
-
+        this->onIdle(index);
+        this->workerVec[index]->tm->DetectTimers();
         int numEvents = epoll_wait(epfd, event, 30, 1000);//TODO wait 1
 
         if (numEvents == -1) {
@@ -231,14 +194,16 @@ void Poller::workerThreadCB(int index) {
                 Session &conn = *this->sessions[sock];
                 if (event[i].events & EPOLLOUT) {
                     if (this->handleWriteEvent(conn) == -1) {
-                        this->closeSession(conn);
+                        this->workerVec[index]->evVec.emplace_back(std::pair<Session*, int>(sessions[fd], REQ_DISCONNECT));
+
                         continue;
                     }
                 }
 
                 if (event[i].events & EPOLLIN) {
                     if (this->handleReadEvent(conn) == -1) {
-                        this->closeSession(conn);
+                        this->workerVec[index]->evVec.emplace_back(std::pair<Session*, int>(sessions[fd], REQ_DISCONNECT));
+
                         continue;
                     }
                 }
@@ -250,10 +215,7 @@ void Poller::workerThreadCB(int index) {
                 epoll_ctl(epfd, EPOLL_CTL_MOD, conn.sessionId, &evReg);
             }
         }
-    }
-    std::set<Session*> backset = this->workerVec[index]->onlineSessionSet;
-    for (auto &E : backset) {
-        this->closeSession(*E);
+        this->workerVec[index]->lock.unlock();
     }
 }
 
@@ -284,7 +246,7 @@ void Poller::listenThreadCB() {
                 sockInfo x;
                 x.fd = sock;
                 x.event = ACCEPT_EVENT;
-                taskQueue[pollerId].enqueue(x);
+                this->logicTaskQueue.enqueue(x);
             }
         }
     }
@@ -349,12 +311,23 @@ int Poller::run() {
         Worker* worker = new (xmalloc(sizeof(Worker))) Worker();
         worker->index = i;
         workerVec.push_back(worker);
+        auto *tm1 = new(xmalloc(sizeof(TimerManager))) TimerManager();
+        this->tm = new(xmalloc(sizeof(TimerManager))) TimerManager();
+        worker->tm = tm1;
+        this->onInit(i);
     }
+        this->createTimerEvent(1000);
+
     {/* start workers*/
         for (int i = 0; i < this->maxWorker; ++i) {
             workThreads.emplace_back(std::thread([=] { this->workerThreadCB(i); }));
         }
     }
+
+    {
+        this->logicWorker = std::thread([=] { this->logicWorkerThreadCB(); });
+    }
+
     {/* start listen*/
         listenThread = std::thread([=] { this->listenThreadCB(); });
     }
@@ -374,7 +347,8 @@ int Poller::run() {
 
     {/* wait exit*/
         this->heartBeatsThread.join();
-        listenThread.join();
+        this->listenThread.join();
+        this->logicWorker.join();
         for (auto &E: this->workThreads) {
             E.join();
         }
@@ -388,6 +362,126 @@ int Poller::run() {
 int Poller::stop()
 {
     this->isRunning = false;
+    return 0;
+}
+
+void Poller::logicWorkerThreadCB() {
+    while (this->isRunning) {
+
+        for (int i = 0; i < this->maxWorker; i++) {
+            this->workerVec[i]->lock.lock();
+        }
+        this->tm->DetectTimers();
+
+
+        for (int i = 0; i < this->maxWorker; i++) {
+            auto x = this->workerVec[i]->onlineSessionSet; //TODO
+            for(auto &E2:x)
+            {
+                if(!E2->canRead)
+                    continue;
+                E2->canRead = false;
+
+                int readBytes = onReadMsg(*E2, E2->readBuffer.size);
+                E2->readBuffer.size -= readBytes;//TODO size < 0
+            }
+            for(auto&E:this->workerVec[i]->evVec)
+            {
+
+                Session *session = E.first;
+                if(E.second == REQ_DISCONNECT)//CLOSE
+                {
+                    this->closeSession(*session);
+                }
+
+            }
+        }
+        sockInfo event = {0};
+        while(logicTaskQueue.try_dequeue(event))
+        {
+            switch(event.event)
+            {
+                case ACCEPT_EVENT:
+                {
+
+                int ret = 0;
+                int clientFd = task.fd;
+
+                int nRcvBufferLen = 80 * 1024;
+                int nSndBufferLen = 1 * 1024 * 1024;
+                int nLen = sizeof(int);
+
+                setsockopt(clientFd, SOL_SOCKET, SO_SNDBUF, (char *) &nSndBufferLen, nLen);
+                setsockopt(clientFd, SOL_SOCKET, SO_RCVBUF, (char *) &nRcvBufferLen, nLen);
+                int nodelay = 1;
+                if (setsockopt(clientFd, IPPROTO_TCP, TCP_NODELAY, &nodelay,
+                               sizeof(nodelay)) < 0)
+                    perror("err: nodelay\n");
+#if defined(OS_WINDOWS)
+                unsigned long ul = 1;
+                ret = ioctlsocket(clientFd, FIONBIO, (unsigned long *) &ul);
+                if (ret == SOCKET_ERROR)
+                    printf("err: ioctlsocket");
+#else
+                int flags = fcntl(clientFd, F_GETFL, 0);
+                if (flags < 0)
+                    printf("err: F_GETFL \n");
+                ret = fcntl(clientFd, F_SETFL, flags | O_NONBLOCK);
+                if(ret < 0)
+                    printf("err: F_SETFL \n");
+#endif
+                auto* conn = sessions[clientFd];
+                sessions[clientFd]->readBuffer.size = 0;
+                sessions[clientFd]->writeBuffer.size = 0;
+                conn->heartBeats = HEARTBEATS_COUNT;
+                evReg.data.fd = clientFd;
+                evReg.events = EPOLLIN | EPOLLONESHOT;
+                this->sessions[clientFd]->sessionId = clientFd;
+                epoll_ctl(this->epolls[index], EPOLL_CTL_ADD, clientFd, &evReg);
+                this->workerVec[index]->onlineSessionSet.insert(conn);
+                this->onAccept(*sessions[clientFd], Addr());
+
+                    break;
+                }
+                default:
+                {
+                    break;
+                }
+            }
+        }
+
+
+        for (int i = 0; i < this->maxWorker; i++) {
+            for (auto &E:this->workerVec[i]->onlineSessionSet) //TODO
+            {
+
+            }
+        }
+
+
+        for (int i = 0; i < this->maxWorker; i++) {
+            this->workerVec[i]->lock.unlock();
+        }
+
+    }
+
+    for(int i = 0; i < this->maxWorker; i++)
+    {
+        std::set<Session *> backset = this->workerVec[i]->onlineSessionSet;
+        for (auto &E : backset) {
+            this->closeSession(*E);
+        }
+    }
+
+}
+
+int Poller::createTimerEvent(int inv) {
+    auto *t2 = new(xmalloc(sizeof(Timer))) Timer(*this->tm);
+    t2->data = (char *) "bbb";
+    t2->Start([this, inv](void *data) {
+        this->onTimerEvent(inv);
+    }, inv);
+
     return 0;
 }
 #endif

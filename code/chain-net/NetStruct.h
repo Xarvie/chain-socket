@@ -90,6 +90,7 @@ enum {
     RW_EVENT
 };
 enum {
+    REQ_CANREAD,
     REQ_DISCONNECT,
     REQ_SHUTDOWN,
     REQ_CONNECT

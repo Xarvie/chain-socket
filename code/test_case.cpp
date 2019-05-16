@@ -1,8 +1,9 @@
 #include "chain-net/Poller.h"
 #include <mutex>
-std::mutex lock;
+
 class Server : public Poller {
 public:
+    std::mutex lock;
     explicit Server(int port, int maxWorker = 4) : Poller(port, maxWorker) {
 
     }
@@ -38,8 +39,7 @@ public:
 };
 
 int main() {
-    Server sx(9876, 1);
+    Server sx(9876, 8);
     sx.run();
-
     return 0;
 }

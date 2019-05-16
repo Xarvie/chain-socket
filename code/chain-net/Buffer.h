@@ -75,9 +75,11 @@ struct Session {
     MessageBuffer readBuffer;
 
     int heartBeats = 0;
+    bool canRead = false;
     void reset() {
         sessionId = 0;
         heartBeats = 0;
+        canRead = false;
         readBuffer.reset();
         writeBuffer.reset();
     }

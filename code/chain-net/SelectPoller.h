@@ -7,10 +7,17 @@
 
 #include "NetStruct.h"
 #include "Buffer.h"
+#include <functional>
+#include <mutex>
+
+class TimerManager;
 
 class Worker {
 public:
     std::set<Session *> onlineSessionSet;
+    TimerManager *tm;
+    std::mutex lock;
+    std::vector<std::pair<Session*, int>> evVec;
     int index;
 };
 
@@ -28,6 +35,31 @@ public:
 
     virtual int onDisconnect(Session &conn) { return 0; }
 
+    virtual int onIdle(int pollIndex) { return 0; }
+
+    virtual int onInit(int pollIndex) { return 0; }
+
+    virtual int onTimerEvent(int interval) { std::cout << "aaa" << std::endl; return 0; }
+
+    inline TimerManager &getUserTimerManager(Session &conn) {
+#if defined(OS_WINDOWS)
+        int id = (conn.sessionId / 4) % this->maxWorker;
+        return *workerVec[id]->tm;
+#else
+        int id = conn.sessionId % this->maxWorker;
+        return *workerVec[id]->tm;
+#endif
+    }
+
+//    inline TimerManager &getPollerTimer() {
+//
+//    }
+
+    typedef std::function<void(int)> TimerCallBack;
+
+    int onTimerCallback(int poller);
+
+
     int sendMsg(Session &conn, const Msg &msg);
 
     int run();
@@ -37,11 +69,16 @@ public:
     void closeSession(Session &conn);
 
 protected:
+
+    int createTimerEvent(int inv);
+
     int handleReadEvent(Session &conn);
 
     int handleWriteEvent(Session &conn);
 
     void workerThreadCB(int index);
+
+    void logicWorkerThreadCB();
 
     void listenThreadCB();
 
@@ -53,12 +90,16 @@ protected:
     int port = 0;
     volatile bool isRunning = false;
     std::vector<std::thread> workThreads;
+    std::thread logicWorker;
     std::thread listenThread;
     std::vector<moodycamel::ConcurrentQueue<sockInfo>> taskQueue;
     std::vector<std::set<uint64_t>> clients;
     std::vector<std::set<uint64_t>> acceptClientFds;
-    std::vector<Worker*> workerVec;
+    std::vector<Worker *> workerVec;
     std::thread heartBeatsThread;
+
+    TimerManager *tm;
+    moodycamel::ConcurrentQueue<sockInfo> logicTaskQueue;
 };
 
 #endif //SERVER_SELECTSERVER_H

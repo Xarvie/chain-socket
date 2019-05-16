@@ -7,13 +7,20 @@
 
 #include "NetStruct.h"
 #include "Buffer.h"
+#include <functional>
 #include "SystemInterface.h"
+#include <mutex>
 
+class TimerManager;
 
 class Worker {
 public:
     std::set<Session *> onlineSessionSet;
     int index;
+
+    TimerManager *tm;
+    std::mutex lock;
+    std::vector<std::pair<Session*, int>> evVec;
 };
 
 class Poller {
@@ -30,15 +37,25 @@ public:
 
     virtual int onDisconnect(Session &conn) { return 0; }
 
+    virtual int onIdle(int pollIndex) { return 0; }
+
+    virtual int onInit(int pollIndex) { return 0; }
+
+    virtual int onTimerEvent(int interval) { std::cout << "aaa" << std::endl; return 0; }
+
+
     int sendMsg(Session &conn, const Msg &msg);
 
     int run();
 
     int stop();
 
+
     void closeSession(Session &conn);
 
 protected:
+    int createTimerEvent(int inv);
+
     int handleReadEvent(Session &conn);
 
     int handleWriteEvent(Session &conn);
@@ -61,6 +78,9 @@ protected:
     volatile bool isRunning = false;
     std::vector<Worker*> workerVec;
     std::thread heartBeatsThread;
+
+    TimerManager *tm;
+    moodycamel::ConcurrentQueue<sockInfo> logicTaskQueue;
 };
 
 #endif /* SERVER_EPOLLPOLL_H_ */
