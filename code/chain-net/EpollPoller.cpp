@@ -22,7 +22,7 @@ Poller::~Poller() {
     this->isRunning = false;
 
     for (auto &E:workThreads) {
-        if(E.joinable())
+        if (E.joinable())
             E.join();
     }
     if (this->listenThread.joinable()) {
@@ -39,10 +39,14 @@ Poller::~Poller() {
     close(listenSocket);
 }
 
-void Poller::closeSession(Session &conn) {
+void Poller::closeSession(Session &conn, int type) {
     if (conn.heartBeats == 0)
         return;
+#ifdef OS_WINDOWS
+    int index = conn.sessionId / 4 % this->maxWorker;
+#else
     int index = conn.sessionId % this->maxWorker;
+#endif
     linger lingerStruct;
 
     lingerStruct.l_onoff = 1;
@@ -53,12 +57,14 @@ void Poller::closeSession(Session &conn) {
     conn.writeBuffer.size = 0;
     conn.heartBeats = 0;
     closeSocket(conn.sessionId);
+
     this->workerVec[index]->onlineSessionSet.erase(&conn);
-    this->onDisconnect(conn);
+    // TODO log std::cout << "close" << icc << std::endl;
+    this->onDisconnect(conn, type);
 }
 
 int Poller::sendMsg(Session &conn, const Msg &msg) {
-    if(conn.heartBeats == 0)
+    if (conn.heartBeats == 0)
         return -1;
     int fd = conn.sessionId;
     int len = msg.len;
@@ -67,31 +73,13 @@ int Poller::sendMsg(Session &conn, const Msg &msg) {
         conn.writeBuffer.push_back(len, data);
         return 0;
     }
-
-    int ret = write(conn.sessionId, data, len);
-    if (ret > 0) {
-
-        this->onWriteBytes(conn, len);
-        if (ret == len)
-            return 0;
-
-        int left = len - ret;
-
-        conn.writeBuffer.push_back(left, data + ret);
-
-    } else {
-        if (errno != EINTR && errno != EAGAIN)
-            return -1;
-
-        conn.writeBuffer.push_back(len, data);
-    }
-
-
+    conn.writeBuffer.push_back(len, data);
+    conn.canWrite = true;
     return 0;
 }
 
 int Poller::handleReadEvent(Session &conn) {
-    if (conn.heartBeats == 0 || conn.readBuffer.size > 1024 * 1024 * 3)
+    if (conn.heartBeats <= 0 || conn.readBuffer.size > 1024 * 1024 * 3)
         return -1;
     static Msg msg;
     unsigned char *buff = conn.readBuffer.buff + conn.readBuffer.size;
@@ -101,11 +89,12 @@ int Poller::handleReadEvent(Session &conn) {
     if (ret > 0) {
         conn.readBuffer.size += ret;
         conn.readBuffer.alloc();
+        conn.canRead = true;
         if (conn.readBuffer.size > 1024 * 1024 * 3) {
-            return -1;
+            return -2;
             //TODO close socket
         }
-         conn.heartBeats = HEARTBEATS_COUNT;
+        conn.heartBeats = HEARTBEATS_COUNT;
 
         //TODO
         //int readBytes = onReadMsg(conn, ret);
@@ -113,10 +102,10 @@ int Poller::handleReadEvent(Session &conn) {
         //if (conn.readBuffer.size < 0)
         //    return -1;
     } else if (ret == 0) {
-        return -1;
+        return -3;
     } else {
         if (errno != EINTR && errno != EAGAIN) {
-            return -1;
+            return -4;
         }
     }
 
@@ -124,7 +113,7 @@ int Poller::handleReadEvent(Session &conn) {
 }
 
 int Poller::handleWriteEvent(Session &conn) {
-    if (conn.heartBeats == 0)
+    if (conn.heartBeats <= 0)
         return -1;
     if (conn.writeBuffer.size == 0)
         return 0;
@@ -151,59 +140,102 @@ int Poller::handleWriteEvent(Session &conn) {
 void Poller::workerThreadCB(int index) {
     int epfd = this->epolls[index];
 
-    struct epoll_event event[30];
+    struct epoll_event event[MAX_EVENT];
     struct epoll_event evReg;
     sockInfo task = {0};
     std::set<Session *> disconnectSet;
-
+    bool isIdle = false;
     moodycamel::ConcurrentQueue<sockInfo> &queue = taskQueue[index];
+
     while (this->isRunning) {
-        std::this_thread::sleep_for(std::chrono::microseconds(1));
+        if (isIdle)
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
         this->workerVec[index]->lock.lock();
         while (queue.try_dequeue(task)) {
             if (task.event == CHECK_HEARTBEATS) {
-                for(auto& E : this->workerVec[index]->onlineSessionSet)
-                {
-                    if(E->heartBeats==0)
+                for (auto &E : this->workerVec[index]->onlineSessionSet) {
+                    if (E->heartBeats <= 0)
                         continue;
 
-                    if(E->heartBeats == 1)
-                    {
-                        auto& conn = *this->sessions[E->sessionId];
+                    if (E->heartBeats == 1) {
+                        auto &conn = *this->sessions[E->sessionId];
+
                         disconnectSet.insert(&conn);
-                    } else{
+                    } else {
                         E->heartBeats--;
                     }
                 }
                 if (disconnectSet.size() > 0) {
                     for (auto &E :disconnectSet) {
-                        this->workerVec[index]->evVec.emplace_back(std::pair<Session*, int>(E, REQ_DISCONNECT));
+                        E->heartBeats = -1;
+                        this->workerVec[index]->evVec.emplace_back(std::pair<Session *, int>(E, REQ_DISCONNECT1));
+
                     }
+                    disconnectSet.clear();
                 }
+            }
+        }
+        for (auto &E : this->workerVec[index]->onlineSessionSet) {
+            Session &conn = *E;
+            if (conn.canWrite == 0)
+                continue;
+
+            int ret = send(conn.sessionId, conn.writeBuffer.buff, conn.writeBuffer.size, 0);
+            if (ret > 0) {
+
+                conn.writeBuffer.erase(ret);
+                if (conn.writeBuffer.size == 0)
+                    conn.canWrite = 0;
+
+            } else {
+                if (errno != EINTR && errno != EAGAIN) {
+                    if (conn.heartBeats > 0) {
+                        E->heartBeats = -1;
+                        this->workerVec[index]->evVec.emplace_back(std::pair<Session *, int>(E, REQ_DISCONNECT2));
+                    }
+                    continue;
+                }
+                evReg.events = EPOLLIN | EPOLLONESHOT;
+                if (conn.writeBuffer.size > 0)
+                    evReg.events |= EPOLLOUT;
+                evReg.data.fd = (int) conn.sessionId;
+                epoll_ctl(epfd, EPOLL_CTL_MOD, conn.sessionId, &evReg);
             }
         }
         this->onIdle(index);
         this->workerVec[index]->tm->DetectTimers();
-        int numEvents = epoll_wait(epfd, event, 30, 1000);//TODO wait 1
+
+
+        int numEvents = epoll_wait(epfd, event, MAX_EVENT, 0);//TODO wait 1
 
         if (numEvents == -1) {
             //printf("wait\n %d", errno);
         } else if (numEvents > 0) {
+            isIdle = false;
             for (int i = 0; i < numEvents; i++) {
                 int sock = event[i].data.fd;
                 Session &conn = *this->sessions[sock];
                 if (event[i].events & EPOLLOUT) {
                     if (this->handleWriteEvent(conn) == -1) {
-                        this->workerVec[index]->evVec.emplace_back(std::pair<Session*, int>(sessions[sock], REQ_DISCONNECT));
-
+                        if (conn.heartBeats > 0) {
+                            conn.heartBeats = -1;
+                            this->workerVec[index]->evVec.emplace_back(
+                                    std::pair<Session *, int>(sessions[sock], REQ_DISCONNECT3));
+                        }
+                        std::cout << "write" << std::endl;
                         continue;
                     }
                 }
 
                 if (event[i].events & EPOLLIN) {
-                    if (this->handleReadEvent(conn) == -1) {
-                        this->workerVec[index]->evVec.emplace_back(std::pair<Session*, int>(sessions[sock], REQ_DISCONNECT));
-
+                    int ret = 0;
+                    if ((ret = this->handleReadEvent(conn)) < 0) {
+                        if (conn.heartBeats > 0) {
+                            conn.heartBeats = -1;
+                            this->workerVec[index]->evVec.emplace_back(
+                                    std::pair<Session *, int>(sessions[sock], REQ_DISCONNECT4));
+                        }
+                        std::cout << "read" << ret << std::endl;
                         continue;
                     }
                 }
@@ -214,6 +246,8 @@ void Poller::workerThreadCB(int index) {
                 evReg.data.fd = sock;
                 epoll_ctl(epfd, EPOLL_CTL_MOD, conn.sessionId, &evReg);
             }
+        } else if (numEvents == 0) {
+            isIdle = true;
         }
         this->workerVec[index]->lock.unlock();
     }
@@ -306,9 +340,8 @@ int Poller::run() {
     {/* create listen*/
         this->createListenSocket(port);
     }
-    for(int i = 0; i < this->maxWorker; i++)
-    {
-        Worker* worker = new (xmalloc(sizeof(Worker))) Worker();
+    for (int i = 0; i < this->maxWorker; i++) {
+        Worker *worker = new(xmalloc(sizeof(Worker))) Worker();
         worker->index = i;
         workerVec.push_back(worker);
         auto *tm1 = new(xmalloc(sizeof(TimerManager))) TimerManager();
@@ -316,7 +349,7 @@ int Poller::run() {
         worker->tm = tm1;
         this->onInit(i);
     }
-        this->createTimerEvent(1000);
+    this->createTimerEvent(1000);
 
     {/* start workers*/
         for (int i = 0; i < this->maxWorker; ++i) {
@@ -332,8 +365,8 @@ int Poller::run() {
         listenThread = std::thread([=] { this->listenThreadCB(); });
     }
 
-        this->heartBeatsThread = std::thread([this] {
-        while(this->isRunning) {
+    this->heartBeatsThread = std::thread([this] {
+        while (this->isRunning) {
             std::this_thread::sleep_for(std::chrono::milliseconds(HEARTBEATS_INTERVAL * 1000));
             for (auto &E : this->taskQueue) {
                 static sockInfo s;
@@ -359,14 +392,15 @@ int Poller::run() {
     return 0;
 }
 
-int Poller::stop()
-{
+int Poller::stop() {
     this->isRunning = false;
     return 0;
 }
 
 void Poller::logicWorkerThreadCB() {
+
     while (this->isRunning) {
+        bool isIdle = true;
 
         for (int i = 0; i < this->maxWorker; i++) {
             this->workerVec[i]->lock.lock();
@@ -376,76 +410,79 @@ void Poller::logicWorkerThreadCB() {
 
         for (int i = 0; i < this->maxWorker; i++) {
             auto x = this->workerVec[i]->onlineSessionSet; //TODO
-            for(auto &E2:x)
-            {
-                if(!E2->canRead)
+            for (auto &E2:x) {
+                if (!E2->canRead)
                     continue;
                 E2->canRead = false;
-
+                isIdle = false;
                 int readBytes = onReadMsg(*E2, E2->readBuffer.size);
                 E2->readBuffer.size -= readBytes;//TODO size < 0
             }
-            for(auto&E:this->workerVec[i]->evVec)
-            {
-
+            for (auto &E:this->workerVec[i]->evVec) {
+                isIdle = false;
                 Session *session = E.first;
-                if(E.second == REQ_DISCONNECT)//CLOSE
-                {
-                    this->closeSession(*session);
+                if (E.second == REQ_DISCONNECT1
+                    || E.second == REQ_DISCONNECT2
+                    || E.second == REQ_DISCONNECT3
+                    || E.second == REQ_DISCONNECT4
+                    || E.second == REQ_DISCONNECT5) {
+
+                    this->closeSession(*session, E.second);
                 }
 
             }
+            this->workerVec[i]->evVec.clear();
         }
         sockInfo event = {0};
-        while(logicTaskQueue.try_dequeue(event))
-        {
-            switch(event.event)
-            {
-                case ACCEPT_EVENT:
-                {
-
-                int ret = 0;
-                int clientFd = event.fd;
-                int index = clientFd / 4 % maxWorker;
-                int nRcvBufferLen = 80 * 1024;
-                int nSndBufferLen = 1 * 1024 * 1024;
-                int nLen = sizeof(int);
-
-                setsockopt(clientFd, SOL_SOCKET, SO_SNDBUF, (char *) &nSndBufferLen, nLen);
-                setsockopt(clientFd, SOL_SOCKET, SO_RCVBUF, (char *) &nRcvBufferLen, nLen);
-                int nodelay = 1;
-                if (setsockopt(clientFd, IPPROTO_TCP, TCP_NODELAY, &nodelay,
-                               sizeof(nodelay)) < 0)
-                    perror("err: nodelay\n");
+        while (logicTaskQueue.try_dequeue(event)) {
+            switch (event.event) {
+                case ACCEPT_EVENT: {
+                    isIdle = false;
+                    int ret = 0;
+                    int clientFd = event.fd;
 #if defined(OS_WINDOWS)
-                unsigned long ul = 1;
-                ret = ioctlsocket(clientFd, FIONBIO, (unsigned long *) &ul);
-                if (ret == SOCKET_ERROR)
-                    printf("err: ioctlsocket");
+                    int index = clientFd / 4 % maxWorker;
 #else
-                int flags = fcntl(clientFd, F_GETFL, 0);
-                if (flags < 0)
-                    printf("err: F_GETFL \n");
-                ret = fcntl(clientFd, F_SETFL, flags | O_NONBLOCK);
-                if(ret < 0)
-                    printf("err: F_SETFL \n");
+                    int index = clientFd % maxWorker;
 #endif
-                auto* conn = sessions[clientFd];
-                sessions[clientFd]->readBuffer.size = 0;
-                sessions[clientFd]->writeBuffer.size = 0;
-                conn->heartBeats = HEARTBEATS_COUNT;
-                struct epoll_event evReg;
-                evReg.data.fd = clientFd;
-                evReg.events = EPOLLIN;
-                this->sessions[clientFd]->sessionId = clientFd;
-                epoll_ctl(this->epolls[index], EPOLL_CTL_ADD, clientFd, &evReg);
-                this->workerVec[index]->onlineSessionSet.insert(conn);
-                this->onAccept(*sessions[clientFd], Addr());
+                    int nRcvBufferLen = 80 * 1024;
+                    int nSndBufferLen = 1 * 1024 * 1024;
+                    int nLen = sizeof(int);
+
+                    setsockopt(clientFd, SOL_SOCKET, SO_SNDBUF, (char *) &nSndBufferLen, nLen);
+                    setsockopt(clientFd, SOL_SOCKET, SO_RCVBUF, (char *) &nRcvBufferLen, nLen);
+                    int nodelay = 1;
+                    if (setsockopt(clientFd, IPPROTO_TCP, TCP_NODELAY, &nodelay,
+                                   sizeof(nodelay)) < 0)
+                        perror("err: nodelay\n");
+#if defined(OS_WINDOWS)
+                    unsigned long ul = 1;
+                    ret = ioctlsocket(clientFd, FIONBIO, (unsigned long *) &ul);
+                    if (ret == SOCKET_ERROR)
+                        printf("err: ioctlsocket");
+#else
+                    int flags = fcntl(clientFd, F_GETFL, 0);
+                    if (flags < 0)
+                        printf("err: F_GETFL \n");
+                    ret = fcntl(clientFd, F_SETFL, flags | O_NONBLOCK);
+                    if (ret < 0)
+                        printf("err: F_SETFL \n");
+#endif
+                    auto *conn = sessions[clientFd];
+                    sessions[clientFd]->readBuffer.size = 0;
+                    sessions[clientFd]->writeBuffer.size = 0;
+                    conn->heartBeats = HEARTBEATS_COUNT;
+                    struct epoll_event evReg;
+                    evReg.data.fd = clientFd;
+                    evReg.events = EPOLLIN;
+                    this->sessions[clientFd]->sessionId = clientFd;
+                    epoll_ctl(this->epolls[index], EPOLL_CTL_ADD, clientFd, &evReg);
+                    this->workerVec[index]->onlineSessionSet.insert(conn);
+                    this->onAccept(*sessions[clientFd], Addr());
 
                     break;
                 }
-                default:
-                {
+                default: {
                     break;
                 }
             }
@@ -463,14 +500,15 @@ void Poller::logicWorkerThreadCB() {
         for (int i = 0; i < this->maxWorker; i++) {
             this->workerVec[i]->lock.unlock();
         }
+        if (isIdle)
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
 
     }
 
-    for(int i = 0; i < this->maxWorker; i++)
-    {
+    for (int i = 0; i < this->maxWorker; i++) {
         std::set<Session *> backset = this->workerVec[i]->onlineSessionSet;
         for (auto &E : backset) {
-            this->closeSession(*E);
+            this->closeSession(*E, REQ_DISCONNECT5);
         }
     }
 
@@ -485,4 +523,5 @@ int Poller::createTimerEvent(int inv) {
 
     return 0;
 }
+
 #endif

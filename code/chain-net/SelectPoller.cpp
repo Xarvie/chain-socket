@@ -58,6 +58,7 @@ int Poller::handleReadEvent(Session &conn) {
     if (ret > 0) {
         conn.readBuffer.size += ret;
         conn.readBuffer.alloc();
+        conn.canRead = true;
         if (conn.readBuffer.size > 1024 * 1024 * 3) {
             return -1;
         }
@@ -133,7 +134,7 @@ void Poller::closeSession(Session &conn) {
 
 void Poller::logicWorkerThreadCB() {
     while (this->isRunning) {
-
+        bool isIdle = true;
         for (int i = 0; i < this->maxWorker; i++) {
             this->workerVec[i]->lock.lock();
         }
@@ -147,24 +148,25 @@ void Poller::logicWorkerThreadCB() {
                 if(!E2->canRead)
                     continue;
                 E2->canRead = false;
-
+                isIdle = false;
                 int readBytes = onReadMsg(*E2, E2->readBuffer.size);
                 E2->readBuffer.size -= readBytes;//TODO size < 0
             }
             for(auto&E:this->workerVec[i]->evVec)
             {
-
+                isIdle = false;
                 Session *session = E.first;
                 if(E.second == REQ_DISCONNECT)//CLOSE
                 {
                     this->closeSession(*session);
                 }
-
+                this->workerVec[i]->evVec.clear();
             }
         }
         sockInfo event = {0};
         while(logicTaskQueue.try_dequeue(event))
         {
+            isIdle = false;
             switch(event.event)
             {
                 case ACCEPT_EVENT:
@@ -234,7 +236,8 @@ void Poller::logicWorkerThreadCB() {
         for (int i = 0; i < this->maxWorker; i++) {
             this->workerVec[i]->lock.unlock();
         }
-
+        if(isIdle)
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
 
     for(int i = 0; i < this->maxWorker; i++)
@@ -253,9 +256,13 @@ void Poller::workerThreadCB(int index) {
     moodycamel::ConcurrentQueue<sockInfo> &queue = taskQueue[index];
     sockInfo event = {0};
     std::set<Session *> disconnectSet;
+    bool isIdle = false;
 
     while (this->isRunning) {
-        std::this_thread::sleep_for(std::chrono::microseconds(1));
+        if(isIdle)
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        else
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
         this->workerVec[index]->lock.lock();
         while (queue.try_dequeue(event)) {
             if (event.event == CHECK_HEARTBEATS) {
@@ -275,6 +282,7 @@ void Poller::workerThreadCB(int index) {
                     for (auto &E :disconnectSet) {
                         this->workerVec[index]->evVec.emplace_back(std::pair<Session*, int>(E, REQ_DISCONNECT));
                     }
+                    disconnectSet.clear();
                 }
 
             }
@@ -307,13 +315,13 @@ void Poller::workerThreadCB(int index) {
             int sec = 0;
             timeval t = {sec, 23000};
             if (maxSock == 0) {
-                //std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                isIdle = true;
                 this->workerVec[index]->lock.unlock();
                 continue;
             }
 
 
-            int ret = select((int) maxSock + 1, &fdRead, &fdWrite, &fdExp, &t);
+            int ret = select((int) maxSock + 1, &fdRead, &fdWrite, &fdExp, NULL);
 
             if (ret < 0) {
 
@@ -327,6 +335,7 @@ void Poller::workerThreadCB(int index) {
 
             std::set<uint64_t> backset = clientSet;
             if (ret > 0) {
+                isIdle = false;
                 for (auto iter = backset.begin(); iter != backset.end(); iter++) {
                     uint64_t fd = *iter;
                     if (FD_ISSET(fd, &fdRead)) {
@@ -342,6 +351,8 @@ void Poller::workerThreadCB(int index) {
                         }
                     }
                 }
+            }else if(ret == 0){
+                isIdle = true;
             }
 
         }

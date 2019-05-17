@@ -48,8 +48,9 @@
 
 enum xx {
     BUFFER_SIZE = 8192,
-    HEARTBEATS_COUNT = 3,
-    HEARTBEATS_INTERVAL = 3,
+    HEARTBEATS_COUNT = 5,
+    HEARTBEATS_INTERVAL = 5,
+    MAX_EVENT = 4096
 };
 
 #define xmalloc malloc
@@ -91,7 +92,11 @@ enum {
 };
 enum {
     REQ_CANREAD,
-    REQ_DISCONNECT,
+    REQ_DISCONNECT1,
+    REQ_DISCONNECT2,
+    REQ_DISCONNECT3,
+    REQ_DISCONNECT4,
+    REQ_DISCONNECT5,
     REQ_SHUTDOWN,
     REQ_CONNECT
 };

@@ -59,7 +59,10 @@ public:
     }
     inline void erase(int len)
     {
-        memmove(this->buff, this->buff+len, (size_t)this->size - len);
+        if(len == 0)
+            return ;
+        if(len < size)
+            memmove(this->buff, this->buff+len, (size_t)this->size - len);
         this->size -= len;
     }
 //private:
@@ -76,10 +79,12 @@ struct Session {
 
     int heartBeats = 0;
     bool canRead = false;
+    bool canWrite = false;
     void reset() {
         sessionId = 0;
         heartBeats = 0;
         canRead = false;
+        canWrite = false;
         readBuffer.reset();
         writeBuffer.reset();
     }
