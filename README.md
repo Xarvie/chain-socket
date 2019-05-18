@@ -8,7 +8,7 @@ hmmmm.. lueluelue
 ### Lock-Free
 *Go to [Documentation](https://github.com/Xarvie/chain-net#documentation) to view details*
 
-### Zero-copy
+### Zero-copy (WIP)
 In most cases, it is Zero-Copy. If the Socket send buffer is full, it will copy the data into the library's built-in IO buffer (This should be avoided during development.)
 
 ### Follow the Unix design philosophy
