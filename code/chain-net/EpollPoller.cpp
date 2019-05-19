@@ -57,8 +57,6 @@ void Poller::closeSession(Session &conn, int type) {
     conn.writeBuffer.size = 0;
     conn.heartBeats = 0;
     closeSocket(conn.sessionId);
-    int ret = send(conn.sessionId, "\n", 1, 0);
-    std::cout << errno << std::endl;
     this->workerVec[index]->onlineSessionSet.erase(&conn);
     // TODO log std::cout << "close" << icc << std::endl;
     this->onDisconnect(conn, type);
