@@ -5,7 +5,7 @@
 #if defined(OS_WINDOWS)
 #define WIN32_LEAN_AND_MEAN
 #undef FD_SETSIZE
-#define FD_SETSIZE  1024
+#define FD_SETSIZE  10240
 #include <ws2tcpip.h>
 #include <Windows.h>
 #endif
