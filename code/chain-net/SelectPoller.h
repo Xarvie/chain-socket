@@ -33,13 +33,13 @@ public:
 
     virtual int onWriteBytes(Session &conn, int len) { return 0; }
 
-    virtual int onDisconnect(Session &conn) { return 0; }
+    virtual int onDisconnect(Session &conn, int type) { return 0; }
 
     virtual int onIdle(int pollIndex) { return 0; }
 
     virtual int onInit(int pollIndex) { return 0; }
 
-    virtual int onTimerEvent(int interval) { std::cout << "aaa" << std::endl; return 0; }
+    virtual int onTimerEvent(int interval) {return 0; }
 
     inline TimerManager &getUserTimerManager(Session &conn) {
 #if defined(OS_WINDOWS)
@@ -66,7 +66,7 @@ public:
 
     int stop();
 
-    void closeSession(Session &conn);
+    void closeSession(Session &conn, int type);
 
 protected:
 
