@@ -177,7 +177,7 @@ void Poller::workerThreadCB(int index) {
         }
         for (auto &E : this->workerVec[index]->onlineSessionSet) {
             Session &conn = *E;
-            if (conn.canWrite == 0)
+            if (conn.canWrite == false)
                 continue;
 
             int ret = send(conn.sessionId, conn.writeBuffer.buff, conn.writeBuffer.size, 0);
@@ -185,7 +185,7 @@ void Poller::workerThreadCB(int index) {
 
                 conn.writeBuffer.erase(ret);
                 if (conn.writeBuffer.size == 0)
-                    conn.canWrite = 0;
+                    conn.canWrite = false;
 
             } else {
                 if (errno != EINTR && errno != EAGAIN) {

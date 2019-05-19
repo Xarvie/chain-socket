@@ -85,7 +85,7 @@ void Poller::workerThreadCB(int pollerIndex) {
 
         for (auto &E : this->workerVec[pollerIndex]->onlineSessionSet) {
             Session &conn = *E;
-            if (conn.canWrite == 0)
+            if (conn.canWrite == false)
                 continue;
 
             int ret = send(conn.sessionId, conn.writeBuffer.buff, conn.writeBuffer.size, 0);
@@ -93,7 +93,7 @@ void Poller::workerThreadCB(int pollerIndex) {
 
                 conn.writeBuffer.erase(ret);
                 if (conn.writeBuffer.size == 0)
-                    conn.canWrite = 0;
+                    conn.canWrite = false;
 
             } else {
                 if (errno != EINTR && errno != EAGAIN) {
