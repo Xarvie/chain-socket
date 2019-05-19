@@ -6,7 +6,7 @@
 #include "EpollPoller.h"
 #include "SystemInterface.h"
 #include "Timer.h"
-
+#include "PrivateHeaders.h"
 Poller::Poller(int port, int threadsNum) {
     this->port = port;
     this->maxWorker = threadsNum;
@@ -57,7 +57,8 @@ void Poller::closeSession(Session &conn, int type) {
     conn.writeBuffer.size = 0;
     conn.heartBeats = 0;
     closeSocket(conn.sessionId);
-
+    int ret = send(conn.sessionId, "\n", 1, 0);
+    std::cout << errno << std::endl;
     this->workerVec[index]->onlineSessionSet.erase(&conn);
     // TODO log std::cout << "close" << icc << std::endl;
     this->onDisconnect(conn, type);
@@ -191,6 +192,7 @@ void Poller::workerThreadCB(int index) {
                 if (errno != EINTR && errno != EAGAIN) {
                     if (conn.heartBeats > 0) {
                         E->heartBeats = -1;
+                        std::cout << errno << std::endl;
                         this->workerVec[index]->evVec.emplace_back(std::pair<Session *, int>(E, REQ_DISCONNECT2));
                     }
                     continue;
@@ -468,17 +470,18 @@ void Poller::logicWorkerThreadCB() {
                     if (ret < 0)
                         printf("err: F_SETFL \n");
 #endif
-                    auto *conn = sessions[clientFd];
-                    sessions[clientFd]->readBuffer.size = 0;
-                    sessions[clientFd]->writeBuffer.size = 0;
-                    conn->heartBeats = HEARTBEATS_COUNT;
+                    auto &conn = *sessions[clientFd];
+                    conn.reset();
+                    conn.heartBeats = HEARTBEATS_COUNT;
+                    conn.sessionId = clientFd;
                     struct epoll_event evReg;
                     evReg.data.fd = clientFd;
                     evReg.events = EPOLLIN;
-                    this->sessions[clientFd]->sessionId = clientFd;
+
                     epoll_ctl(this->epolls[index], EPOLL_CTL_ADD, clientFd, &evReg);
-                    this->workerVec[index]->onlineSessionSet.insert(conn);
+                    this->workerVec[index]->onlineSessionSet.insert(&conn);
                     this->onAccept(*sessions[clientFd], Addr());
+
 
                     break;
                 }

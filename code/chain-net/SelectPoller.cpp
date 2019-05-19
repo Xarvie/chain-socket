@@ -52,6 +52,7 @@ int Poller::handleReadEvent(Session &conn) {
         return -3;
     } else {
         if (!IsEagain()) {
+            std::cout << errno << std::endl;
             return -4;
         }
     }
@@ -183,13 +184,13 @@ void Poller::logicWorkerThreadCB() {
 
 
                     this->clients[index].insert((uint64_t) event.fd);
-                    auto *conn = sessions[clientFd];
-                    conn->readBuffer.size = 0;
-                    conn->writeBuffer.size = 0;
-                    conn->heartBeats = HEARTBEATS_COUNT;
-                    this->workerVec[index]->onlineSessionSet.insert(conn);
+                    auto &conn = *sessions[clientFd];
+                    conn.reset();
+                    conn.heartBeats = HEARTBEATS_COUNT;
+                    conn.sessionId = clientFd;
+                    this->workerVec[index]->onlineSessionSet.insert(&conn);
 
-                    this->onAccept(*conn, Addr());
+                    this->onAccept(conn, Addr());
                     break;
                 }
                 default: {

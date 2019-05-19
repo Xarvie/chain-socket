@@ -427,8 +427,6 @@ void Poller::logicWorkerThreadCB() {
                         setsockopt(clientFd, SOL_SOCKET, SO_SNDBUF, (char *) &nSndBufferLen, nLen);
                         setsockopt(clientFd, SOL_SOCKET, SO_RCVBUF, (char *) &nRcvBufferLen, nLen);
 
-                        Session *conn = this->sessions[clientFd];
-
                         int flags = fcntl(clientFd, F_GETFL, 0);
                         if (flags < 0) on_error("Could not get client socket flags: %s\n", strerror(errno));
 
@@ -444,11 +442,12 @@ void Poller::logicWorkerThreadCB() {
                         if (kevent(this->queue[pollerIndex], &event_set[pollerIndex], 1, NULL, 0, NULL) == -1) {
                             printf("error\n");
                         }
-                        conn->readBuffer.size = 0;
-                        conn->writeBuffer.size = 0;
-                        conn->heartBeats = HEARTBEATS_COUNT;
-                        this->workerVec[pollerIndex]->onlineSessionSet.insert(conn);
-                        this->onAccept(*conn, Addr());
+                        auto &conn = *sessions[clientFd];
+                        conn.reset();
+                        conn.heartBeats = HEARTBEATS_COUNT;
+                        conn.sessionId = clientFd;
+                        this->workerVec[pollerIndex]->onlineSessionSet.insert(&conn);
+                        this->onAccept(conn, Addr());
                     }
 
                     break;
