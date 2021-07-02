@@ -38,7 +38,8 @@ None
 
 - Unit test case
 - Ipv6
-- Connector
+- ~~Connector~~
+- Documentation
 
 # Build environment
 ``` bash
