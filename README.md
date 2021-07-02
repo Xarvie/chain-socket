@@ -1,5 +1,5 @@
 # Overview
-chain-net is a cross-platform CXX library for network IO，Provides built-in IO buffer and completion event callback interface
+chain-socket is a cross-platform CXX library for network IO，Provides built-in IO buffer and completion event callback interface
 
 # Feature
 ### Unsafe-Code
