@@ -6,11 +6,16 @@
 #include <stdlib.h>
 #include <cstring>
 
-void MessageBuffer::reset() {
+void MessageBuffer::init() {
     buff = (unsigned char *) xmalloc(BUFFER_SIZE);
     capacity = BUFFER_SIZE;
     maxSize = BUFFER_MAX_SIZE;
     size = 0;
+}
+
+void MessageBuffer::reset(){
+	destroy();
+	init();
 }
 
 void MessageBuffer::setMaxSize(int size) {
@@ -19,7 +24,7 @@ void MessageBuffer::setMaxSize(int size) {
 
 void MessageBuffer::destroy() {
     capacity = 0;
-    free(buff);
+    xfree(buff);
     buff = nullptr;
     size = 0;
 }

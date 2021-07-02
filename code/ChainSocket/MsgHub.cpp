@@ -1,4 +1,4 @@
-#include "NetPoller.h"
+#include "MsgHub.h"
 #include "Timer.h"
 #include "SelectPoller.h"
 #include <iostream>
@@ -234,37 +234,37 @@ int MsgHub::initMsgHub() {
 }
 
 int MsgHub::onTask() {
-    ConnectionTask task;
-    if (q->try_dequeue(task)) {
-        if ((Session*)this->sessions[task.sessionId] == task.sessPtr) {
-            if (task.type == 1) {
-                if (task.len > sizeof(SendTask)) {
-                    SendTask *t = (SendTask *) task.data;
-                    this->sendTo(task.sessPtr, t->data, t->len);
-                }
+	ConnectionTask task;
+	if (q->try_dequeue(task)) {
+		if ((Session*)this->sessions[task.sessionId] == task.sessPtr) {
+			if (task.type == SEND_TO) {
+				if (task.len > sizeof(SendTask)) {
+					SendTask *t = (SendTask *) task.data;
+					this->sendTo(task.sessPtr, t->data, t->len);
+				}
 
-            }
-            if (task.type == 2) {
-                if (task.len > sizeof(CloseTask)) {
-                    CloseTask *t = (CloseTask *) task.data;
-                    this->closeSession(task.sessionId, t->reason);
-                }
-            }
-            if (task.type == 3) {
-                if (task.len > sizeof(ConnectTask)) {
-                    ConnectTask *addr = (ConnectTask *) task.data;
-                    this->connectTo((char *) task.data, addr->port, addr->timeOut);
-                }
+			}
+			if (task.type == CLOSE_SESSION) {
+				if (task.len > sizeof(CloseTask)) {
+					CloseTask *t = (CloseTask *) task.data;
+					this->closeSession(task.sessionId, t->reason);
+				}
+			}
+			if (task.type == CONNECT_TO) {
+				if (task.len > sizeof(ConnectTask)) {
+					ConnectTask *addr = (ConnectTask *) task.data;
+					this->connectTo((char *) task.data, addr->port, addr->timeOut);
+				}
 
-            }
-            if (task.type == 0) {
-                std::abort();
-            }
-        }
-    } else {
+			}
+			if (task.type == 0) {
+				std::abort();
+			}
+		}
+	} else {
 
-    }
-    return 0;
+	}
+	return 0;
 }
 
 int MsgHub::waitMsg() {

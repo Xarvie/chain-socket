@@ -8,7 +8,10 @@
 #include "SystemInterface.hpp"
 #include <mswsock.h>
 #include <ws2tcpip.h>
+#include "xmalloc.h"
 #include "Log.h"
+#include <iostream>
+
 
 static GUID ax_guid = WSAID_ACCEPTEX;
 static GUID as_guid = WSAID_GETACCEPTEXSOCKADDRS;
@@ -34,13 +37,17 @@ struct IocpData {
 
     HANDLE x;
 
-    void reset() {
-        conn.reset();
-        io_ctx_r = (LP_Pre_IO_Context) xmalloc(sizeof(Pre_IO_Context));
-        memset(io_ctx_r, 0, sizeof(Pre_IO_Context));
-        io_ctx_s = (LP_Pre_IO_Context) xmalloc(sizeof(Pre_IO_Context));
-        memset(io_ctx_s, 0, sizeof(Pre_IO_Context));
+	void init() {
+		conn.init();
+		io_ctx_r = (LP_Pre_IO_Context) xmalloc(sizeof(Pre_IO_Context));
+		memset(io_ctx_r, 0, sizeof(Pre_IO_Context));
+		io_ctx_s = (LP_Pre_IO_Context) xmalloc(sizeof(Pre_IO_Context));
+		memset(io_ctx_s, 0, sizeof(Pre_IO_Context));
+	}
 
+    void reset() {
+		destroy();
+		init();
     }
 
     void destroy() {
@@ -132,7 +139,7 @@ Session *Poller::initNewSession(uint64_t fd, Session::Type type) {
         if (data != NULL)
             continue;
         data = (IocpData *) xmalloc(sizeof(IocpData));
-        data->reset();
+        data->init();
         data->conn.sessionId = this->curId;
         data->conn.fd = (uint64_t) fd;
         p = (Session*)data;
@@ -204,7 +211,6 @@ void Poller::reset() {
             sessions[i]->reset();
         }
     }
-
 }
 
 int Poller::stop() {

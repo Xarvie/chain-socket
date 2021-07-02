@@ -2,65 +2,13 @@
 #define SERVER_NETSTRUCT_H
 
 #include "SystemReader.h"
-
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <errno.h>
-
-#include <time.h>
-#include <vector>
-#include <iostream>
 #include <string>
-#include <list>
-#include <thread>
-#include <mutex>
-#include <utility>
-#include <map>
-#include <set>
-
-#if defined(OS_WINDOWS)
-
-#else
-
-#include <sys/socket.h>
-#include <sys/types.h>
-#include <fcntl.h>
-#include <unistd.h>
-#include <arpa/inet.h>
-#include <netinet/in.h>
-#include <signal.h>
-#include <netinet/tcp.h>
-#include <sys/time.h>
-
-#endif
-
-#if defined(OS_DARWIN)
-
-#include <sys/event.h>
-
-#endif
-
-#if defined(OS_LINUX)
-
-#include <sys/epoll.h>
-
-#endif
-
-#include "Queue.h"
-
-
-#define CONN_MAXFD 65535
 
 enum xx {
     HEARTBEATS_COUNT = 90,
     HEARTBEATS_INTERVAL = 5,
     MAX_EVENT = 4096
 };
-
-#define xmalloc malloc
-#define xfree free
-
 
 enum RWMOD {
     ClientIoNULL,

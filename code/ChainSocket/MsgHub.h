@@ -1,5 +1,5 @@
-#ifndef CHAIN_SOCKET_NETPOLLER_H
-#define CHAIN_SOCKET_NETPOLLER_H
+#ifndef CHAIN_SOCKET_MSGHUB_H
+#define CHAIN_SOCKET_MSGHUB_H
 
 #include "SystemReader.h"
 
@@ -39,27 +39,35 @@ class SelectPoller;
 #include "socketInfo.h"
 
 struct ConnectionTask {
-    Session *sessPtr;
-    int sessionId;
-    int type;
-    int len;
-    void *data;
+	Session *sessPtr;
+	int sessionId;
+	int type;
+	int len;
+	void *data;
+};
+
+
+enum TASK_TYPE{
+	NONE,
+	SEND_TO,
+	CLOSE_SESSION,
+	CONNECT_TO,
 };
 
 struct SendTask {
-    unsigned char *data;
-    int len;
+	unsigned char *data;
+	int len;
 };
 
 struct CloseTask {
-    int sessionId;
-    int reason;
+	int sessionId;
+	int reason;
 };
 
 struct ConnectTask {
-    char addr[128];
-    int port;
-    int timeOut;
+	char addr[128];
+	int port;
+	int timeOut;
 };
 
 class ConnectPoller {
@@ -121,4 +129,4 @@ protected:
     moodycamel::ConcurrentQueue<ConnectionTask, moodycamel::ConcurrentQueueDefaultTraits> *q;
 };
 
-#endif //CHAIN_SOCKET_NETPOLLER_H
+#endif //CHAIN_SOCKET_MSGHUB_H
