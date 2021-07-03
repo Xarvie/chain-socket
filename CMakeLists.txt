@@ -27,7 +27,7 @@ ENDIF ()
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g")
 #set(CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} -O -static")
 ADD_EXECUTABLE(${CMAKE_PROJECT_NAME}
-        ${CODEFILES} code/ChainSocket/xmalloc.cpp code/ChainSocket/xmalloc.h)
+        ${CODEFILES} code/ChainSocket/xmalloc.cpp code/ChainSocket/xmalloc.h code/ChainSocket/Ip.cpp code/ChainSocket/Ip.h)
 target_include_directories(${CMAKE_PROJECT_NAME}
         PUBLIC ${INCLUDEDIRS})
 

@@ -3,64 +3,65 @@
 
 #include "SystemReader.h"
 #include <string>
+#include "Ip.h"//TODO
 
 enum xx {
-    HEARTBEATS_COUNT = 90,
-    HEARTBEATS_INTERVAL = 5,
-    MAX_EVENT = 4096
+	HEARTBEATS_COUNT = 90,
+	HEARTBEATS_INTERVAL = 5,
+	MAX_EVENT = 4096
 };
 
 enum RWMOD {
-    ClientIoNULL,
-    ClientIoAccept,
-    ClientIoConnect,
-    ClientIoRead,
-    ClientIoWrite
+	ClientIoNULL,
+	ClientIoAccept,
+	ClientIoConnect,
+	ClientIoRead,
+	ClientIoWrite
 };
 
 struct Addr {
-    std::string ip;
-    int port;
-    int type;
+	std::string ip;
+	int port;
+	int type;
 };
 
 struct Msg {
-    int len;
-    unsigned char *buff;
+	int len;
+	unsigned char *buff;
 };
 
 enum {
-    ACCEPT_EVENT,
-    CHECK_HEARTBEATS,
-    RW_EVENT,
-    CONNECT_EVENT
+	ACCEPT_EVENT,
+	CHECK_HEARTBEATS,
+	RW_EVENT,
+	CONNECT_EVENT
 };
 enum {
-    CT_NORMAL,
-    CT_READ_ZERO,
-    CT_READ_ERROR,
-    CT_WSEND_ERROR1,
-    CT_WSEND_ERROR2,
-    CT_READ_ERROR2,
-    CT_SEND_ERROR2,
-    CT_ERROR_END,
-    CT_WEBSOCKET_READ_HEAD_ERROR,
-    CT_WEBSOCKET_EXTENSION_ON,
-    CT_WEBSOCKET_CONTINUATION_ON
+	CT_NORMAL,
+	CT_READ_ZERO,
+	CT_READ_ERROR,
+	CT_WSEND_ERROR1,
+	CT_WSEND_ERROR2,
+	CT_READ_ERROR2,
+	CT_SEND_ERROR2,
+	CT_ERROR_END,
+	CT_WEBSOCKET_READ_HEAD_ERROR,
+	CT_WEBSOCKET_EXTENSION_ON,
+	CT_WEBSOCKET_CONTINUATION_ON
 
 };
 
 #if defined(OS_LINUX)
 enum {
-    EVENT_READ = EPOLLIN,
-    EVENT_WRITE = EPOLLOUT,
-    EVENT_ONCE = EPOLLONESHOT
+	EVENT_READ = EPOLLIN,
+	EVENT_WRITE = EPOLLOUT,
+	EVENT_ONCE = EPOLLONESHOT
 };
 #else
 enum {
-    EVENT_READ = 0x1,
-    EVENT_WRITE = 0x2,
-    EVENT_ONCE = 0x4
+	EVENT_READ = 0x1,
+	EVENT_WRITE = 0x2,
+	EVENT_ONCE = 0x4
 };
 #endif
 

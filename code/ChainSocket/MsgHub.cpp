@@ -23,6 +23,11 @@ ConnectPoller::~ConnectPoller() {
 
 }
 
+int ConnectPoller::init(IP::Version version){
+	ipVersion = version;
+	return 0;
+}
+
 int ConnectPoller::GetSocketStatus(int connectFd) {
     int error = 0;
     int ret = send(connectFd, NULL, 0, 0);
@@ -114,7 +119,7 @@ std::map<uint64_t, sockInfo> ConnectPoller::getResult() {
 }
 
 int ConnectPoller::tryConnect(const char *ip, const int port, const int timeout, uint64_t *sockFd) {
-    int64_t connectFd = socket(AF_INET, SOCK_STREAM, 0);
+    int64_t connectFd = socket(this->ipVersion, SOCK_STREAM, 0);
 
     int nRcvBufferLen = 32 * 1024 * 1024;
     int nSndBufferLen = 32 * 1024 * 1024;
@@ -126,13 +131,25 @@ int ConnectPoller::tryConnect(const char *ip, const int port, const int timeout,
     if (timeout > 0)
         setSockNonBlock(connectFd);
 
-    struct sockaddr_in targetAddr;
-    targetAddr.sin_family = AF_INET;
-    targetAddr.sin_port = htons(port);
-    targetAddr.sin_addr.s_addr = inet_addr(ip);
+	int ret = 0;
+	if(this->ipVersion == IP::V4)
+	{
+		sockaddr_in addrin;
+		memset(&addrin, 0, sizeof(addrin));
+		addrin.sin_family = this->ipVersion;
+		addrin.sin_addr.s_addr = inet_addr(ip);
+		addrin.sin_port = htons(port);
+		ret = connect(connectFd, (struct sockaddr *) &addrin, sizeof(addrin));
+	} else {
+		sockaddr_in6 addrin;
+		memset(&addrin, 0, sizeof(addrin));
+		addrin.sin6_family = this->ipVersion;
+		inet_pton(AF_INET6, ip, &addrin.sin6_addr);
+		addrin.sin6_port = htons(port);
+		ret = connect(connectFd, (struct sockaddr *) &addrin, sizeof(addrin));
+	}
 
 
-    int ret = connect(connectFd, (struct sockaddr *) &targetAddr, sizeof(targetAddr));
     if (ret < 0) {
         /* if connect error */
 
@@ -229,7 +246,9 @@ MsgHub::~MsgHub() {
     delete q;
 }
 
-int MsgHub::initMsgHub() {
+int MsgHub::init(IP::Version ipversion_) {
+	Poller::init(NULL, ipversion_);
+	this->connectPoller.init(ipversion_);
     return 0;
 }
 

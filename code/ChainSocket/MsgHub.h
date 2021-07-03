@@ -76,11 +76,14 @@ public:
 
     ~ConnectPoller();
 
+    int init(IP::Version version = IP::V4);
     int GetSocketStatus(int fd);
 
     void checkAllStatus();
 
     int onTimerCheckConnect(int interval);
+
+
 
     std::pair<int, uint64_t> connectTo(const char *ip, const int port, const int timeout);
 
@@ -89,6 +92,7 @@ public:
     std::map<uint64_t, sockInfo> getResult();
 
 private:
+	IP::Version ipVersion;
     TimerManager *tm;
     Timer *connectTimer;
     std::map<uint64_t, std::tuple<unsigned long long, int, std::string, int> > connectTime;
@@ -102,7 +106,7 @@ public:
 
     ~MsgHub();
 
-    int initMsgHub();
+    int init(IP::Version ipversion_ = IP::V4);
 
     int waitMsg();
 

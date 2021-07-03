@@ -8,6 +8,8 @@
 #include <string>
 #include "Buffer.h"
 #include <map>
+#include "NetStruct.h"
+
 struct IocpData;
 class Log;
 class Poller {
@@ -32,9 +34,7 @@ public:
 
     int loopOnce(int time);
 
-    int tryConnect(const char *ip, const int port, const int timeout, uint64_t * sockFd);
-
-    int init(Log* loggerp = NULL);
+    int init(Log* loggerp = NULL, IP::Version ipversion = IP::V4);
 
     int stop();
 
@@ -55,13 +55,11 @@ protected:
     void reset();
 
     int post_accept_ex(Session* connp, uint64_t listenFd);
-    int do_accept(int connIdconn);
+    int do_accept(int listenSID, int clientSID);
 
     int do_recv(Session* connp, int len);
 
     int do_send(Session* connp, int len);
-
-
 
     bool isRun;
     std::vector<void *> iocps;
@@ -70,8 +68,13 @@ protected:
     int curId;
     int maxId;
     std::vector<IocpData*> sessions;
-    std::map<uint64_t , char[64]> peerAddrMap;
+    std::map<uint64_t , char[128]> peerAddrMap;
     Log* logger;
+	IP::Version ipVersion;
+
+private:
+	int initIocp();
+	int IdGen();
 };
 
 #endif

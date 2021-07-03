@@ -5,7 +5,9 @@
 #include <iostream>
 
 static int64_t x = 0;
-
+#define TEST_IPv6 "fe80::2d99:3cb7:d1e7:24fb%16"
+#define TEST_IPv4 "127.0.0.1"
+#define TEST_PORT 6010
 class Server : public MsgHub {
 public:
 	int genTask(ConnectionTask *task) override {
@@ -49,7 +51,7 @@ public:
 
 
 	int onAccept(Session *lconnp, Session *aconnp) override {
-		std::cout << "onAccept :" << aconnp->fd << std::endl;
+		std::cout << "server: "<< lconnp->sessionId << "onAccept :" << aconnp->sessionId << std::endl;
 
 		this->postRecv(aconnp);
 
@@ -64,15 +66,12 @@ public:
 		std::cout << connp->sessionId << " onRecv :" << s << std::endl;
 
 		connp->readBuffer.erase(len);
-		x++;
-
+		x+=len;
 
 		this->sendTo(connp, (unsigned char *) "hello", 5);
 
-		if (x > 20) {
-			this->closeSession(connp->sessionId, CT_NORMAL);
-			this->connectTo("127.0.0.1", 6010, 5000000);
-		}
+		this->closeSession(connp->sessionId, CT_NORMAL);
+		this->connectTo(TEST_IPv6, TEST_PORT, 5000000);
 		return 0;
 	}
 
@@ -80,9 +79,11 @@ public:
 		//std::cout << "send bytes :" << connp->fd << len << std::endl;
 		return 0;
 	}
-
+	int onDisconnect(Session* connp, int type) override {
+		std::cout << "onDisconnect :" << connp->sessionId << "type:" << type << std::endl;
+	}
 	int onConnect(Session *connp, std::string ip, int port) override {
-		std::cout << "onConnect :" << ip << ":" << port << std::endl;
+		std::cout << "onConnect :" << ip << ":" << port << " sid" << connp->sessionId << std::endl;
 		this->postRecv(connp);
 		this->sendTo(connp, (unsigned char *) "hello", 5);
 
