@@ -69,7 +69,7 @@ int Poller::post_accept_ex(Session *connp, uint64_t listenFd) {
 	ZeroMemory(&(io_ctx_r->overlapped), sizeof(OVERLAPPED));
 	io_ctx_r->action = RWMOD::ClientIoAccept;
 
-
+	//预先开一个socket，等AcceptEx到一个客户端进入后，持续进行posix accept N个客户端
 	io_ctx_r->accept = WSASocket(this->ipVersion, SOCK_STREAM, 0, nullptr, 0, WSA_FLAG_OVERLAPPED);
 	if (INVALID_SOCKET == io_ctx_r->accept) {
 		std::cout << "WSASocket() failed." << std::endl;
@@ -77,7 +77,6 @@ int Poller::post_accept_ex(Session *connp, uint64_t listenFd) {
 	}
 	static char b[] = {0};
 	static WSABUF tmpBuf = {0, b};
-	//this->peerAddrMap[io_ctx_r->accept / 4] = 0;
 
 	if (0 == lpfn_AcceptEx(
 			listener,
@@ -85,8 +84,8 @@ int Poller::post_accept_ex(Session *connp, uint64_t listenFd) {
 			&this->peerAddrMap[connp->sessionId],
 			0,//io_ctx->wsa_buf.len - (sizeof(SOCKADDR_IN) + 16) * 2,
 
-			sizeof(sockaddr_in6) + 16,//sizeof(SOCKADDR_IN) + 16,//sizeof(SOCKADDR_IN) + 16,
-			sizeof(sockaddr_in6) + 16,//sizeof(SOCKADDR_IN) + 16,//sizeof(SOCKADDR_IN) + 16,
+			(this->ipVersion==IP::V4?sizeof(sockaddr_in) : sizeof(sockaddr_in6)) + 16,//sizeof(SOCKADDR_IN) + 16,//sizeof(SOCKADDR_IN) + 16,
+			(this->ipVersion==IP::V4?sizeof(sockaddr_in) : sizeof(sockaddr_in6)) + 16,//sizeof(SOCKADDR_IN) + 16,//sizeof(SOCKADDR_IN) + 16,
 
 			nullptr,
 			&(io_ctx_r->overlapped)
