@@ -2,8 +2,6 @@
 chain-socket is a cross-platform CXX library for network IO，Provides built-in IO buffer and completion event callback interface
 
 # Feature
-### Unsafe-Code
-hmmmm.. lueluelue
 
 ### Lock-Free
 *Go to [Documentation](https://github.com/Xarvie/chain-net#documentation) to view details*
@@ -37,7 +35,7 @@ None
 # TO-DO list
 
 - Unit test case
-- Ipv6
+- ~~Ipv6~~
 - ~~Connector~~
 - Documentation
 
